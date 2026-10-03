@@ -1,6 +1,7 @@
 window.HF = window.HF || {};
 HF.geometry = {
   id: "spi-spec",
+  presentation: "path",
   image: "assets/spi_block_diagram.png",
   // Reference coordinates preserve the v0.3.1 calibration keys and values.
   viewBox: { width: 1502, height: 1283 },
@@ -20,3 +21,8 @@ HF.geometry = {
     { id: "mosi", box: { x: 1364, y: 467, width: 49, height: 48 } }
   ]
 };
+// Compatibility geometry for the net-graph model: each calibrated route is one segment.
+HF.geometry.nets = HF.geometry.paths.map((path) => ({
+  id: path.id, junctions: [],
+  segments: [{ id: `${path.id}-s1`, from: "source", to: "sink", points: path.points }]
+}));

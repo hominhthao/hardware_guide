@@ -1,4 +1,4 @@
-# HardwareFlow v0.3.2
+# HardwareFlow v0.3.3
 
 HardwareFlow is a local hardware architecture and dataflow visualizer. Open `index.html` in a modern browser; no server, dependencies, or build step are needed.
 
@@ -6,6 +6,7 @@ HardwareFlow is a local hardware architecture and dataflow visualizer. Open `ind
 
 - **Abstract View:** The v0.1 high-level CPU → A2H Bus → SPI Controller → TX FIFO → Shift Register → MOSI diagram remains available.
 - **Spec Overlay View:** Shows the original SPI specification diagram directly in SVG, with calibrated signal routes layered over it. The current walkthrough is **SPI TX Dataflow**: SPI Data Register → Shifter → Port Control Logic → MOSI.
+- **RISC-V single-cycle:** Overlays Figure 1: Single Cycle Processor with a seven-level dependency walkthrough of `ADD x3, x1, x2`. The diagram switcher changes the image, scenario inputs, trace, and controls without reloading.
 
 The views switch without reloading. On desktop, the specification diagram and controls share one compact workspace. The diagram remains the main focus and fits within the available panel while preserving its aspect ratio.
 
@@ -28,6 +29,12 @@ The Spec view uses three separate data layers, loaded by ordinary deferred `<scr
 - `src/spiTxTrace.js` generates a four-event conceptual trace for the TX byte. Each event carries active edge and node IDs, the TX value, a note, and an `extras` object reserved for future detail.
 
 `src/player.js` consumes a trace and reports the current event plus progress through it. `src/renderer.js` draws the image overlay and timeline from that event, geometry, and flow. The player and renderer have no SPI stage or path IDs. `app.js` connects controls, calibration storage, the Abstract View, and these layers. Open `tests/trace.test.html` directly in a browser to check trace IDs, values, order, and geometry references.
+
+For the RISC-V diagram, `data/riscvGeometry.js` holds the image, natural 2792 × 1278 viewBox, node bounds, and directed net segments with junctions. `data/riscvDesign.js` holds the hardware topology: nodes, multi-sink nets, mux inputs and selects, clocked marks, and an unverified `specRef`. It has no coordinates. A scenario consists of x1, x2, and initial PC; `src/riscvAddTrace.js` turns it into seven events containing net values, selected mux inputs, unused results, captions, and clock-edge state writes. The trace is the only source for rendered values and state changes. `src/riscvApp.js` wires the scenario controls and calibration editor to the same player and renderer used by SPI. Legacy SPI edges are also represented as single-sink nets; their existing paths and calibration keys remain intact.
+
+The seven RISC-V levels describe **dependency order**, not elapsed time. The final level is a clock edge: x3 and PC change there. The diagram does not establish timing within the cycle. The default instruction word is the read-only `0x002081B3`; input arithmetic wraps to 32 bits. The controls accept unsigned 32-bit decimal or hexadecimal values. Open `tests/riscv-add.test.html` directly to check four ADD scenarios, graph references, mux choices, and state writes.
+
+In the RISC-V diagram, **Debug: show all nets** labels every route. **Edit Paths** selects a net and segment, then lets you add, move, or delete points and segments. Click near an existing junction to snap; hold Shift while placing a point to lock it horizontally or vertically to its neighbor. **Save Net** stores overrides under `hardwareflow.riscv.nets.v1`, separate from SPI calibration. Export and import JSON transfer these overrides. The draft node bounds and routes can also be refined in `data/riscvGeometry.js`. The original image remains at `assets/risc_v_block_diagram.png`; the app loads its copy at `assets/riscv-single-cycle.png`.
 
 ### How to fill `specRef`
 

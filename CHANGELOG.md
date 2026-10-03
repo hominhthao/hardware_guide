@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.3 — Phase A net graph and RISC-V ADD
+
+- Added a second diagram using the supplied RISC-V single-cycle processor image at its measured 2792 × 1278 pixel size.
+- Added separate net geometry, design topology, ADD scenario trace, and seven dependency levels with multi-sink pulses, mux selections, unused results, captions, and clock-edge state writes.
+- Extended the generic renderer to draw net graphs while preserving SPI's conceptual playback and existing calibration.
+- Added RISC-V net debugging, path calibration, browser storage, JSON transfer, four-scenario browser tests, and open hardware questions in `NOTES.md`.
+
 ## v0.3.2 — Phase 0 trace refactor
 
 - Separated calibrated image geometry from semantic flow data.

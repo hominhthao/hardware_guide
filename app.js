@@ -140,6 +140,7 @@ let selectedPointIndex = null;
 let editingPaths = false;
 let dimEnabled = true;
 let currentInputValue = null;
+let activeDiagram = "spi";
 
 const renderer = HF.createSpecRenderer({
   geometry, flow, inputElement: document.getElementById("tx-input"),
@@ -152,10 +153,12 @@ const renderer = HF.createSpecRenderer({
 });
 const player = HF.createTracePlayer({
   durationForEvent: (event, index) => renderer.durationForEvent(event, index),
-  onChange: (event, progress, meta) => renderer.render(event, progress, meta, { dim: dimEnabled, inputValid: !!currentInputValue, inputValue: currentInputValue })
+  onChange: (event, progress, meta) => { if (activeDiagram === "spi") renderer.render(event, progress, meta, { dim: dimEnabled, inputValid: !!currentInputValue, inputValue: currentInputValue }); }
 });
+HF.spiController = { renderer, player };
 
 function copyPoints(points) { return points.map(({ x, y }) => ({ x, y })); }
+function syncSpiNets() { geometry.nets.forEach((net) => { const path = geometry.paths.find((item) => item.id === net.id); if (path) net.segments[0].points = path.points; }); }
 function pathById(id) { return geometry.paths.find((path) => path.id === id); }
 function nodeById(id) { return geometry.nodes.find((node) => node.id === id); }
 function validPoints(points) {
@@ -178,6 +181,7 @@ function loadSavedCalibration() {
       if (validBox(bounds[node.id])) { node.box = { ...bounds[node.id] }; boundsOverrides.set(node.id, { ...node.box }); }
     });
   } catch { /* Keep defaults when storage is unavailable. */ }
+  syncSpiNets();
 }
 function persistPaths() { localStorage.setItem(CALIBRATION_KEY, JSON.stringify(Object.fromEntries(pathOverrides))); }
 function persistBounds() { localStorage.setItem(BOUNDS_KEY, JSON.stringify(Object.fromEntries(boundsOverrides))); }
@@ -207,12 +211,12 @@ function loadSpecImage() {
   probe.addEventListener("load", () => {
     container.classList.add("has-image"); missing.hidden = true;
     document.getElementById("edit-paths-mode").disabled = false;
-    renderer.setImageSize({ width: probe.naturalWidth, height: probe.naturalHeight }); player.refresh();
+    renderer.setImageSize({ width: probe.naturalWidth, height: probe.naturalHeight }, activeDiagram === "spi"); player.refresh();
   });
   probe.addEventListener("error", () => {
     container.classList.remove("has-image"); missing.hidden = false;
     document.getElementById("edit-paths-mode").disabled = true;
-    renderer.setImageSize(null); player.reset();
+    renderer.setImageSize(null, activeDiagram === "spi"); player.reset();
   });
   probe.src = geometry.image;
 }
@@ -232,7 +236,7 @@ function selectEditorPath(id) {
   renderEditorOverlay(); updateEditorStatus();
 }
 function diagramClickToPoint(event) {
-  if (!editingPaths) return;
+  if (activeDiagram !== "spi" || !editingPaths) return;
   const point = renderer.clientToReference(event); if (!point) return;
   const points = pathDrafts.get(selectedPathId) ?? copyPoints(pathById(selectedPathId).points);
   if (selectedPointIndex === null) points.push(point); else points[selectedPointIndex] = point;
@@ -243,20 +247,21 @@ function diagramClickToPoint(event) {
 function saveSelectedPath() {
   const points = pathDrafts.get(selectedPathId) ?? copyPoints(pathById(selectedPathId).points);
   if (!validPoints(points)) { updateEditorStatus("A path needs at least two points inside the diagram."); return; }
-  pathById(selectedPathId).points = copyPoints(points); pathOverrides.set(selectedPathId, copyPoints(points));
+  pathById(selectedPathId).points = copyPoints(points); pathOverrides.set(selectedPathId, copyPoints(points)); syncSpiNets();
   try { persistPaths(); updateEditorStatus("Path saved in this browser. It will survive a reload."); }
   catch { updateEditorStatus("Path updated for this session, but browser storage is unavailable."); }
   renderEditorOverlay();
 }
 function resetCalibration() {
   pathOverrides.clear(); boundsOverrides.clear(); pathDrafts.clear(); selectedPointIndex = null;
-  geometry.paths = JSON.parse(JSON.stringify(HF.geometry.paths)); geometry.nodes = JSON.parse(JSON.stringify(HF.geometry.nodes));
+  geometry.paths = JSON.parse(JSON.stringify(HF.geometry.paths)); geometry.nodes = JSON.parse(JSON.stringify(HF.geometry.nodes)); syncSpiNets();
   let message = "Default TX routes and block bounds restored.";
   try { localStorage.removeItem(CALIBRATION_KEY); localStorage.removeItem(BOUNDS_KEY); }
   catch { message = "Defaults restored for this session, but browser storage could not be cleared."; }
   renderEditorOverlay(); updateEditorStatus(message); showBounds();
 }
 function setSpecMode(edit) {
+  if (activeDiagram === "riscv") { HF.riscvController?.setEditMode(edit); return; }
   if (edit && !renderer.imageSize) return;
   if (player.state.status === "running") player.reset();
   editingPaths = edit;
@@ -275,9 +280,11 @@ function setVisualizationMode(mode) {
   const showingSpec = mode === "spec";
   if (showingSpec === !document.getElementById("spec-view").hidden) return;
   if (!showingSpec && player.state.status === "running") player.reset();
+  if (!showingSpec && HF.riscvController?.player.state.status === "running") HF.riscvController.player.reset();
   document.getElementById("abstract-view").hidden = showingSpec;
   document.getElementById("spec-view").hidden = !showingSpec;
   document.getElementById("spec-mode-switch").hidden = !showingSpec;
+  document.getElementById("diagram-switch").hidden = !showingSpec;
   document.body.classList.toggle("spec-active", showingSpec);
   document.getElementById("brand-description").textContent = showingSpec ? "SPI TX Dataflow" : "Hardware architecture visualizer";
   document.getElementById("abstract-mode").classList.toggle("is-selected", !showingSpec);
@@ -285,7 +292,8 @@ function setVisualizationMode(mode) {
   document.getElementById("abstract-mode").setAttribute("aria-pressed", String(!showingSpec));
   document.getElementById("spec-mode").setAttribute("aria-pressed", String(showingSpec));
   document.getElementById("flow-key").hidden = showingSpec;
-  if (showingSpec) setSpecMode(editingPaths); else renderConnections(architecture);
+  if (showingSpec) { if (activeDiagram === "riscv") HF.riscvController?.show(); else setSpecMode(editingPaths); }
+  else renderConnections(architecture);
 }
 function showBounds() {
   const node = nodeById(document.getElementById("bounds-select").value); if (!node) return;
@@ -349,12 +357,12 @@ function init() {
       geometry.paths.forEach((path) => { path.points = copyPoints(payload.paths[path.id]); pathOverrides.set(path.id, copyPoints(path.points)); });
       geometry.nodes.forEach((node) => { node.box = { ...payload.bounds[node.id] }; boundsOverrides.set(node.id, { ...node.box }); });
       try { persistPaths(); persistBounds(); } catch { /* Keep imported values in this session. */ }
-      pathDrafts.clear(); renderEditorOverlay(); updateEditorStatus("Calibration imported."); showBounds();
+      syncSpiNets(); pathDrafts.clear(); renderEditorOverlay(); updateEditorStatus("Calibration imported."); showBounds();
     } catch { updateEditorStatus("Invalid calibration JSON."); }
     event.target.value = "";
   });
-  document.getElementById("fit-button").addEventListener("click", () => renderer.setZoom("fit"));
-  document.getElementById("focus-button").addEventListener("click", () => renderer.setZoom("focus"));
+  document.getElementById("fit-button").addEventListener("click", () => (activeDiagram === "riscv" ? HF.riscvController.renderer : renderer).setZoom("fit"));
+  document.getElementById("focus-button").addEventListener("click", () => (activeDiagram === "riscv" ? HF.riscvController.renderer : renderer).setZoom("focus"));
   document.getElementById("focus-button").classList.add("is-selected");
   document.getElementById("speed-select").addEventListener("change", (event) => player.setSpeed(Number(event.target.value)));
   document.getElementById("dim-toggle").addEventListener("change", (event) => { dimEnabled = event.target.checked; player.refresh(); });
@@ -370,7 +378,7 @@ function init() {
     renderEditorOverlay();
   });
   document.addEventListener("keydown", (event) => {
-    if (document.getElementById("spec-view").hidden || editingPaths || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (document.getElementById("spec-view").hidden || activeDiagram !== "spi" || editingPaths || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable]")) return;
     if (event.code === "Space") { event.preventDefault(); document.getElementById("run-button").click(); }
     else if (event.key === "ArrowRight") { event.preventDefault(); document.getElementById("step-button").click(); }

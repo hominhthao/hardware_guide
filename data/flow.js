@@ -19,3 +19,12 @@ HF.flow = {
   ],
   order: ["register-to-shifter", "shifter-to-port", "port-to-mosi"]
 };
+// The conceptual edges are also single-sink nets. The legacy edge IDs stay in the trace.
+HF.flow.nets = HF.flow.edges.map((edge) => ({
+  id: edge.pathId, from: edge.from, to: [edge.to], role: "data", label: edge.label, labelSource: "diagram"
+}));
+HF.spiDesign = {
+  designId: HF.flow.flowId, diagramId: HF.flow.diagramId,
+  specRef: HF.flow.specRef, nodes: HF.flow.nodes, nets: HF.flow.nets,
+  muxes: []
+};

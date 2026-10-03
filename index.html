@@ -8,10 +8,14 @@
     <link rel="stylesheet" href="style.css">
     <script src="data/geometry.js" defer></script>
     <script src="data/flow.js" defer></script>
+    <script src="data/riscvGeometry.js" defer></script>
+    <script src="data/riscvDesign.js" defer></script>
     <script src="src/spiTxTrace.js" defer></script>
+    <script src="src/riscvAddTrace.js" defer></script>
     <script src="src/player.js" defer></script>
     <script src="src/renderer.js" defer></script>
     <script src="app.js" defer></script>
+    <script src="src/riscvApp.js" defer></script>
   </head>
   <body>
     <div class="page-shell">
@@ -28,12 +32,16 @@
             <button id="abstract-mode" class="mode-button is-selected" type="button" aria-pressed="true">Abstract</button>
             <button id="spec-mode" class="mode-button" type="button" aria-pressed="false">Spec Overlay</button>
           </div>
+          <div id="diagram-switch" class="spec-mode-switch" role="group" aria-label="Diagram" hidden>
+            <button id="spi-diagram-button" class="mode-button is-selected" type="button" aria-pressed="true">SPI TX</button>
+            <button id="riscv-diagram-button" class="mode-button" type="button" aria-pressed="false">RISC-V single-cycle</button>
+          </div>
           <div id="spec-mode-switch" class="spec-mode-switch" role="group" aria-label="Specification mode" hidden>
             <button id="view-flow-mode" class="mode-button is-selected" type="button" aria-pressed="true">View Flow</button>
             <button id="edit-paths-mode" class="mode-button" type="button" aria-pressed="false">Edit Paths</button>
           </div>
         </div>
-        <span class="version">v0.3.2</span>
+        <span class="version">v0.3.3</span>
       </header>
 
       <main>
@@ -76,7 +84,8 @@
                     <span>Place the original SPI block diagram at <code>assets/spi_block_diagram.png</code>.</span>
                   </div>
                   <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div><button id="fit-button" type="button">Fit</button><button id="focus-button" type="button">Focus flow</button></div></div>
-                  <span class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
+                  <span id="fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
+                  <div id="net-caption" class="net-caption" hidden></div>
                   <svg id="spec-overlay" class="spec-overlay" role="img" aria-label="Original SPI specification diagram with transmit dataflow paths" hidden></svg>
                 </div>
               </div>
@@ -116,6 +125,42 @@
                 </div>
               </div>
 
+              <div id="riscv-flow-panel" class="flow-panel riscv-flow-panel" hidden>
+                <div class="workspace-side-heading"><p class="eyebrow">Single-cycle / dependency order</p><h2>RISC-V ADD</h2></div>
+                <div class="workspace-side-content">
+                  <label class="input-label" for="riscv-preset">Scenario</label>
+                  <select id="riscv-preset" class="scenario-select"><option value="add">ADD x3, x1, x2</option></select>
+                  <div class="scenario-grid">
+                    <label>x1 <input id="riscv-x1" value="5" inputmode="text"></label>
+                    <label>x2 <input id="riscv-x2" value="7" inputmode="text"></label>
+                    <label>Initial PC <input id="riscv-pc" value="0" inputmode="text"></label>
+                  </div>
+                  <p class="input-help">32-bit unsigned hex (0x…) or decimal</p>
+                  <p class="input-help">Instruction: <strong>0x002081B3</strong></p>
+                  <p id="riscv-error" class="input-error" role="alert" hidden></p>
+                  <div class="playback-options"><label>Speed <select id="riscv-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label class="dim-toggle"><input id="riscv-dim" type="checkbox" checked> Dim background</label></div>
+                  <button id="riscv-run" class="run-button" type="button">Run →</button>
+                  <div class="step-controls"><button id="riscv-step" type="button">Step</button><button id="riscv-previous" type="button">Previous</button><button id="riscv-reset" type="button">Reset</button></div>
+                  <label class="debug-toggle"><input id="riscv-debug" type="checkbox"> Debug: show all nets</label>
+                  <div class="riscv-status"><span class="info-label">Status</span><strong id="riscv-status">Ready</strong><span class="info-label">Level</span><strong id="riscv-level">0 / 7</strong></div>
+                  <div id="riscv-timeline" class="riscv-timeline" aria-label="Dependency levels"></div>
+                  <div class="state-heading"><span class="info-label">State</span><span id="riscv-spec-ref" class="unverified">Unverified — no specRef</span></div>
+                  <div id="riscv-state" class="state-list"></div>
+                </div>
+              </div>
+              <div id="net-editor-panel" class="editor-panel" hidden>
+                <p class="eyebrow">Calibration / net graph</p><h2>Edit nets</h2>
+                <label class="path-picker">Net <select id="net-select"></select></label>
+                <label class="path-picker">Segment <select id="segment-select"></select></label>
+                <p class="editor-help">Click to add a point or select a point and click to move it. Points snap to junctions; hold Shift to lock horizontal or vertical. Save to keep changes.</p>
+                <div class="editor-actions">
+                  <button id="net-delete-point" type="button">Delete Point</button><button id="net-add-segment" type="button">Add Segment</button>
+                  <button id="net-delete-segment" type="button">Delete Segment</button><button id="net-save" class="primary-button" type="button">Save Net</button>
+                  <button id="net-reset" type="button">Reset Calibration</button><button id="net-export" type="button">Export JSON</button>
+                  <label class="import-calibration">Import JSON<input id="net-import" type="file" accept="application/json,.json"></label>
+                </div>
+                <p id="net-editor-status" class="editor-status" role="status"></p>
+              </div>
               <div id="editor-panel" class="editor-panel" hidden>
                 <div class="editor-heading">
                   <div>
