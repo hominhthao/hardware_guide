@@ -41,7 +41,7 @@
             <button id="edit-paths-mode" class="mode-button" type="button" aria-pressed="false">Edit Paths</button>
           </div>
         </div>
-        <span class="version">v0.3.3</span>
+        <span class="version">v0.3.4</span>
       </header>
 
       <main>
@@ -85,9 +85,14 @@
                   </div>
                   <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div><button id="fit-button" type="button">Fit</button><button id="focus-button" type="button">Focus flow</button></div></div>
                   <span id="fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
-                  <div id="net-caption" class="net-caption" hidden></div>
                   <svg id="spec-overlay" class="spec-overlay" role="img" aria-label="Original SPI specification diagram with transmit dataflow paths" hidden></svg>
                 </div>
+              </div>
+              <div id="net-story-footer" class="net-story-footer" hidden>
+                <div class="net-story-caption"><strong id="net-step-meta">Step 0 / 9</strong><span id="net-caption" class="net-caption" hidden></span><span id="net-parallel-tag" hidden></span></div>
+                <p id="net-detail" class="net-detail"></p>
+                <div id="net-control-strip" class="net-control-strip"></div>
+                <div id="net-unused-strip" class="net-unused-strip" hidden><button id="net-unused-toggle" type="button" aria-expanded="false"></button><span id="net-unused-list" hidden></span></div>
               </div>
             </div>
 
@@ -138,9 +143,12 @@
                   <p class="input-help">32-bit unsigned hex (0x…) or decimal</p>
                   <p class="input-help">Instruction: <strong>0x002081B3</strong></p>
                   <p id="riscv-error" class="input-error" role="alert" hidden></p>
+                  <div class="story-options"><div class="segmented" role="group" aria-label="Presentation"><button id="riscv-story" class="is-selected" type="button" aria-pressed="true">Story</button><button id="riscv-full" type="button" aria-pressed="false">Full</button></div><div class="segmented" role="group" aria-label="Pacing"><button id="riscv-guided" class="is-selected" type="button" aria-pressed="true">Guided</button><button id="riscv-auto" type="button" aria-pressed="false">Auto</button></div></div>
                   <div class="playback-options"><label>Speed <select id="riscv-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label class="dim-toggle"><input id="riscv-dim" type="checkbox" checked> Dim background</label></div>
                   <button id="riscv-run" class="run-button" type="button">Run →</button>
                   <div class="step-controls"><button id="riscv-step" type="button">Step</button><button id="riscv-previous" type="button">Previous</button><button id="riscv-reset" type="button">Reset</button></div>
+                  <div id="riscv-next-prompt" class="next-prompt" hidden>Next → Press Space or Step</div>
+                  <label class="trail-toggle"><input id="riscv-full-trail" type="checkbox"> Keep full trail</label>
                   <label class="debug-toggle"><input id="riscv-debug" type="checkbox"> Debug: show all nets</label>
                   <div class="riscv-status"><span class="info-label">Status</span><strong id="riscv-status">Ready</strong><span class="info-label">Level</span><strong id="riscv-level">0 / 7</strong></div>
                   <div id="riscv-timeline" class="riscv-timeline" aria-label="Dependency levels"></div>

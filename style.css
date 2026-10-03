@@ -374,3 +374,35 @@ body.spec-active .riscv-flow-panel { display: flex; flex-direction: column; heig
 body.spec-active .riscv-flow-panel .workspace-side-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 body.spec-active .riscv-timeline { flex: 1; min-height: 60px; max-height: none; overflow-y: auto; }
 body.spec-active .state-heading, body.spec-active .state-list { flex: 0 0 auto; }
+
+/* Nine-step net story; these rules apply only while the second diagram is shown. */
+.net-story-footer { flex: 0 0 auto; min-height: 112px; padding: 7px 12px 9px; background: #14212a; border-top: 1px solid #344957; color: #f2f7f9; }
+.net-story-footer[hidden] { display: none; }
+.net-story-caption { display: flex; align-items: center; gap: 9px; min-height: 27px; }
+.net-story-caption strong { flex: 0 0 auto; color: #ffc590; font-size: 12px; }
+.net-story-caption .net-caption { position: static; display: inline; max-width: none; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: 15px; font-weight: 700; line-height: 1.3; }
+.net-story-caption .net-caption[hidden] { display: none; }
+#net-parallel-tag { flex: 0 0 auto; padding: 3px 6px; border-radius: 4px; background: #285267; color: #bcefff; font-size: 10px; font-weight: 700; }
+#net-parallel-tag[hidden] { display: none; }
+.net-detail { min-height: 17px; margin: 1px 0 4px; color: #abc1cd; font-size: 11px; }
+.net-control-strip { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; min-height: 20px; max-height: 44px; }
+.net-control-chip { padding: 2px 6px; border: 1px solid #47515e; border-radius: 4px; color: #8d9da9; background: #252a36; font: 600 10px ui-monospace, monospace; }
+.net-control-chip.is-relevant { border-color: #bb85ee; color: #f1daff; background: #47335d; }
+.net-unused-strip { display: flex; align-items: center; gap: 7px; margin-top: 3px; color: #b6c4c8; font-size: 10px; }
+.net-unused-strip[hidden] { display: none; }
+.net-unused-strip button { padding: 2px 6px; border: 1px solid #74858e; border-radius: 4px; background: #263843; color: #d1e2e8; font-size: 10px; cursor: pointer; }
+.net-unused-strip span { color: #aeb9bd; }
+.story-options { display: flex; gap: 7px; margin-top: 7px; }
+.segmented { display: flex; flex: 1; border: 1px solid #465c69; border-radius: 5px; overflow: hidden; }
+.segmented button { flex: 1; padding: 4px; border: 0; background: #1d2d36; color: #aabfc8; font-size: 10px; cursor: pointer; }
+.segmented button.is-selected { background: #3c6071; color: #fff; font-weight: 700; }
+.next-prompt { margin-top: 4px; padding: 4px 6px; border-radius: 4px; color: #ffdaac; background: #5b3d26; font-size: 11px; font-weight: 700; }
+.next-prompt[hidden] { display: none; }
+.trail-toggle { display: flex; align-items: center; gap: 5px; margin-top: 6px; color: #b7c8d0; font-size: 10px; }
+.is-net-graph.is-story .net-group.is-secondary .net-base { opacity: .15; stroke-width: 2; }
+.is-net-graph.is-story .net-segment.is-secondary-segment .net-base { opacity: .15; stroke-width: 2; }
+.is-net-graph.is-story .net-group.is-hidden-control, .is-net-graph.is-story .net-group.is-hidden-unused { opacity: 0; }
+.is-net-graph.is-story .net-group.is-recent .net-base { stroke: #47b9c5; opacity: .6; }
+.is-net-graph.is-story .net-group.is-old .net-base { opacity: .06; }
+.is-net-graph.is-story .net-group.is-old .net-fill { visibility: hidden; }
+.is-net-graph .net-group { cursor: help; }

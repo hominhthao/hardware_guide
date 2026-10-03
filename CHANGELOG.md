@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.4 — Phase A.1 story mode
+
+- Split the ADD walkthrough into nine paced presentation steps while preserving the dependency levels and clock-edge writes.
+- Added generic focus rendering, Story/Full views, recent-step trail, guided and auto pacing, a fixed caption and control strip, and value-pill collision avoidance.
+- Kept the net topology, saved calibration, SPI playback, and local-file loading unchanged.
+
 ## v0.3.3 — Phase A net graph and RISC-V ADD
 
 - Added a second diagram using the supplied RISC-V single-cycle processor image at its measured 2792 × 1278 pixel size.

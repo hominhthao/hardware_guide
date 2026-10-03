@@ -12,11 +12,17 @@ window.HF = window.HF || {};
   let dimEnabled = true;
   let scenarioValid = false;
   let imageSize = null;
+  let presentation = "story";
+  let keepFullTrail = false;
+  let revealUnused = false;
   const el = (id) => document.getElementById(id);
   const netUI = {
     run: el("riscv-run"), step: el("riscv-step"), previous: el("riscv-previous"), reset: el("riscv-reset"),
     status: el("riscv-status"), level: el("riscv-level"), timeline: el("riscv-timeline"), state: el("riscv-state"),
     specRef: el("riscv-spec-ref"), badge: el("fidelity-badge"), caption: el("net-caption"),
+    footer: el("net-story-footer"), stepMeta: el("net-step-meta"), parallel: el("net-parallel-tag"),
+    detail: el("net-detail"), controls: el("net-control-strip"), unused: el("net-unused-strip"),
+    unusedButton: el("net-unused-toggle"), unusedList: el("net-unused-list"), nextPrompt: el("riscv-next-prompt"),
     inputs: [el("riscv-x1"), el("riscv-x2"), el("riscv-pc")]
   };
   const renderer = HF.createSpecRenderer({
@@ -27,7 +33,7 @@ window.HF = window.HF || {};
   const player = HF.createTracePlayer({
     durationForEvent: (event, index) => renderer.durationForEvent(event, index),
     onChange: (event, progress, meta) => {
-      if (activeDiagram === "riscv") renderer.render(event, progress, meta, { dim: dimEnabled, inputValid: scenarioValid });
+      if (activeDiagram === "riscv") renderer.render(event, progress, meta, { dim: dimEnabled, inputValid: scenarioValid, presentation, keepFullTrail, revealUnused });
     }
   });
   const netById = (id) => geometry.nets.find((net) => net.id === id);
@@ -66,6 +72,7 @@ window.HF = window.HF || {};
     const scenario = readScenario();
     const trace = scenario ? HF.generateRiscvTrace(design, scenario) : null;
     player.load(trace);
+    revealUnused = false; netUI.unusedButton.setAttribute("aria-expanded", "false");
     renderer.renderTimeline((index) => player.seek(index), trace);
     player.refresh();
   }
@@ -158,6 +165,7 @@ window.HF = window.HF || {};
     editing = edit;
     el("riscv-flow-panel").hidden = edit;
     el("net-editor-panel").hidden = !edit;
+    netUI.footer.hidden = edit;
     document.querySelector(".workspace-sidebar > .flow-panel").hidden = true;
     el("editor-panel").hidden = true;
     el("diagram-overlay-container").classList.toggle("is-editing", edit);
@@ -174,6 +182,7 @@ window.HF = window.HF || {};
     el("riscv-diagram-button").classList.add("is-selected"); el("riscv-diagram-button").setAttribute("aria-pressed", "true");
     el("fidelity-badge").textContent = player.state.trace?.badge ?? "DEPENDENCY ORDER - not time; state updates at clock edge";
     el("net-caption").hidden = true;
+    netUI.footer.hidden = false;
     el("spec-overlay").setAttribute("aria-label", "Original processor diagram with active net graph");
     el("missing-image").querySelector("code").textContent = geometry.image;
     el("missing-image").hidden = !!imageSize;
@@ -189,6 +198,7 @@ window.HF = window.HF || {};
     el("spi-diagram-button").classList.add("is-selected"); el("spi-diagram-button").setAttribute("aria-pressed", "true");
     el("riscv-flow-panel").hidden = true; el("net-editor-panel").hidden = true;
     el("net-caption").hidden = true;
+    netUI.footer.hidden = true;
     el("fidelity-badge").textContent = "CONCEPTUAL – not cycle-accurate";
     el("spec-overlay").setAttribute("aria-label", "Original SPI specification diagram with transmit dataflow paths");
     el("missing-image").querySelector("code").textContent = HF.geometry.image;
@@ -203,6 +213,7 @@ window.HF = window.HF || {};
   const rendererSpi = HF.spiController.renderer;
   const playerSpi = HF.spiController.player;
   HF.riscvController = { show, showSpi, setEditMode, renderer, player, geometry, design };
+  player.setPacing("guided");
   loadSaved();
   [el("riscv-x1"), el("riscv-x2"), el("riscv-pc")].forEach((input) => input.addEventListener("input", () => loadScenario()));
   el("riscv-preset").addEventListener("change", loadScenario);
@@ -216,6 +227,21 @@ window.HF = window.HF || {};
   netUI.previous.addEventListener("click", () => player.previous());
   netUI.reset.addEventListener("click", () => player.reset());
   el("riscv-speed").addEventListener("change", (event) => player.setSpeed(Number(event.target.value)));
+  for (const [id, mode] of [["riscv-story", "story"], ["riscv-full", "full"]]) el(id).addEventListener("click", () => {
+    presentation = mode;
+    for (const [buttonId, value] of [["riscv-story", "story"], ["riscv-full", "full"]]) {
+      el(buttonId).classList.toggle("is-selected", mode === value); el(buttonId).setAttribute("aria-pressed", String(mode === value));
+    }
+    player.refresh();
+  });
+  for (const [id, mode] of [["riscv-guided", "guided"], ["riscv-auto", "auto"]]) el(id).addEventListener("click", () => {
+    player.setPacing(mode, mode === "auto" ? 1800 : 0);
+    for (const [buttonId, value] of [["riscv-guided", "guided"], ["riscv-auto", "auto"]]) {
+      el(buttonId).classList.toggle("is-selected", mode === value); el(buttonId).setAttribute("aria-pressed", String(mode === value));
+    }
+  });
+  el("riscv-full-trail").addEventListener("change", (event) => { keepFullTrail = event.target.checked; player.refresh(); });
+  netUI.unusedButton.addEventListener("click", () => { revealUnused = !revealUnused; netUI.unusedButton.setAttribute("aria-expanded", String(revealUnused)); player.refresh(); });
   el("riscv-dim").addEventListener("change", (event) => { dimEnabled = event.target.checked; player.refresh(); });
   el("riscv-debug").addEventListener("change", (event) => renderer.setDebug(event.target.checked));
   el("riscv-diagram-button").addEventListener("click", () => {
