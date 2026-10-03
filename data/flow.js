@@ -3,7 +3,7 @@ HF.flow = {
   flowId: "spi-tx",
   diagramId: "spi-spec",
   fidelity: "conceptual",
-  readyNote: "Ready to follow the SPI TX dataflow.",
+  readyNoteKey: "ui.spiReady",
   // TODO: fill only from a verified hardware specification.
   specRef: { doc: "", section: "", page: null, signals: [] },
   nodes: [

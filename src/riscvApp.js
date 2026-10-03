@@ -28,10 +28,11 @@ window.HF = window.HF || {};
   const renderer = HF.createSpecRenderer({
     geometry, flow: design, inputElement: netUI.inputs[0], netUI,
     onSelectNet: (netId, segmentId) => selectNet(netId, segmentId),
-    onSelectNetPoint: (index) => { selectedPointIndex = index; renderEditor(); status(`Point ${index + 1} selected. Click its new position.`); }
+    onSelectNetPoint: (index) => { selectedPointIndex = index; renderEditor(); status("dev.riscv.selected", { n: index + 1 }); }
   });
   const player = HF.createTracePlayer({
     durationForEvent: (event, index) => renderer.durationForEvent(event, index),
+    holdForEvent: (event) => document.getElementById("popup-toggle")?.checked !== false ? HF.popupHoldMs(event?.popup, HF.i18n.t) : 1800,
     onChange: (event, progress, meta) => {
       if (activeDiagram === "riscv") renderer.render(event, progress, meta, { dim: dimEnabled, inputValid: scenarioValid, presentation, keepFullTrail, revealUnused });
     }
@@ -64,7 +65,7 @@ window.HF = window.HF || {};
     const valid = x1 !== null && x2 !== null && pc !== null;
     scenarioValid = valid;
     el("riscv-error").hidden = valid;
-    el("riscv-error").textContent = valid ? "" : "Enter unsigned 32-bit hex (0x…) or decimal values.";
+    el("riscv-error").textContent = valid ? "" : HF.i18n.t("ui.invalidU32");
     [el("riscv-x1"), el("riscv-x2"), el("riscv-pc")].forEach((input) => input.setAttribute("aria-invalid", String(!valid)));
     return valid ? { x1, x2, pc } : null;
   }
@@ -98,11 +99,16 @@ window.HF = window.HF || {};
     return netDrafts.get(selectedNetId);
   }
   function currentSegment() { return currentDraft().segments.find((segment) => segment.id === selectedSegmentId); }
-  function status(message) { el("net-editor-status").textContent = message; }
+  let lastStatus = { key: "dev.riscv.ready", params: {} };
+  function status(key, params = {}) {
+    lastStatus = { key, params };
+    const values = key === "dev.riscv.point" ? { ...params, junction: params.junction ? HF.i18n.t("dev.riscv.junction") : "" } : params;
+    el("net-editor-status").textContent = HF.i18n.t(key, values);
+  }
   function populateSegments() {
     const select = el("segment-select"); select.replaceChildren();
     currentDraft().segments.forEach((segment, index) => {
-      const option = document.createElement("option"); option.value = segment.id; option.textContent = `Segment ${index + 1}`; select.append(option);
+      const option = document.createElement("option"); option.value = segment.id; option.textContent = `${HF.i18n.t("ui.segment")} ${index + 1}`; select.append(option);
     });
     if (!currentDraft().segments.some((segment) => segment.id === selectedSegmentId)) selectedSegmentId = currentDraft().segments[0]?.id ?? "";
     select.value = selectedSegmentId;
@@ -120,7 +126,7 @@ window.HF = window.HF || {};
     selectedPointIndex = null;
     el("net-select").value = netId;
     populateSegments(); renderEditor();
-    status(`${currentDraft().segments.length} segment(s). Click a point to move it, or click the diagram to add one.`);
+    status("dev.riscv.segments", { n: currentDraft().segments.length });
   }
   function netDiagramClick(event) {
     if (activeDiagram !== "riscv" || !editing) return;
@@ -141,22 +147,22 @@ window.HF = window.HF || {};
     if (closest.distance <= threshold) { point.x = closest.junction.x; point.y = closest.junction.y; }
     if (selectedPointIndex === null) points.push(point); else points[selectedPointIndex] = point;
     selectedPointIndex = null; renderEditor();
-    status(`Point set to (${point.x}, ${point.y})${closest.distance <= threshold ? " at a junction" : ""}. Save Net to keep it.`);
+    status("dev.riscv.point", { x: point.x, y: point.y, junction: closest.distance <= threshold });
   }
   function saveNet() {
     const draft = currentDraft();
-    if (!validNet(draft)) { status("Each segment needs at least two points inside the image."); return; }
+    if (!validNet(draft)) { status("dev.riscv.invalidNet"); return; }
     const index = geometry.nets.findIndex((net) => net.id === selectedNetId);
     geometry.nets[index] = clone(draft); netOverrides.set(selectedNetId, clone(draft));
-    try { persist(); status("Net calibration saved in this browser."); }
-    catch { status("Net updated for this session; browser storage is unavailable."); }
+    try { persist(); status("dev.riscv.saved"); }
+    catch { status("dev.riscv.savedSession"); }
     renderEditor();
   }
   function resetNets() {
     netOverrides.clear(); netDrafts.clear(); geometry.nets = clone(HF.riscvGeometry.nets);
     selectedPointIndex = null; selectedSegmentId = netById(selectedNetId).segments[0]?.id ?? "";
-    try { localStorage.removeItem(NET_KEY); status("Default net routes restored."); }
-    catch { status("Defaults restored for this session; storage could not be cleared."); }
+    try { localStorage.removeItem(NET_KEY); status("dev.riscv.reset"); }
+    catch { status("dev.riscv.resetSession"); }
     populateSegments(); renderEditor();
   }
   function setEditMode(edit) {
@@ -176,7 +182,7 @@ window.HF = window.HF || {};
       el(id).setAttribute("aria-pressed", String(selected));
     }
     el("spec-summary").textContent = edit ? "Adjust net segments" : "Draft calibrated nets";
-    renderEditor(); if (!edit) player.refresh();
+    renderEditor(); HF.translateUI?.(); if (!edit) player.refresh();
   }
   function show() {
     activeDiagram = "riscv";
@@ -193,7 +199,7 @@ window.HF = window.HF || {};
     el("edit-paths-mode").disabled = !imageSize;
     if (imageSize) renderer.renderStatic();
     renderer.setFollow(presentation === "story" && !editing);
-    setEditMode(editing); player.refresh();
+    setEditMode(editing); HF.translateUI?.(); player.refresh();
   }
   function showSpi() {
     if (player.state.status === "running") player.reset();
@@ -214,11 +220,11 @@ window.HF = window.HF || {};
     el("focus-button").disabled = editingPaths;
     document.querySelector(".workspace-sidebar > .flow-panel").hidden = editingPaths;
     el("editor-panel").hidden = !editingPaths;
-    setSpecMode(editingPaths); playerSpi.refresh();
+    setSpecMode(editingPaths); HF.translateUI?.(); playerSpi.refresh();
   }
   const rendererSpi = HF.spiController.renderer;
   const playerSpi = HF.spiController.player;
-  HF.riscvController = { show, showSpi, setEditMode, renderer, player, geometry, design };
+  HF.riscvController = { show, showSpi, setEditMode, renderer, player, geometry, design, refreshEditorStatus: () => { populateSegments(); status(lastStatus.key, lastStatus.params); } };
   player.setPacing("guided");
   loadSaved();
   [el("riscv-x1"), el("riscv-x2"), el("riscv-pc")].forEach((input) => input.addEventListener("input", () => loadScenario()));
@@ -267,7 +273,7 @@ window.HF = window.HF || {};
   el("net-delete-point").addEventListener("click", () => {
     const points = currentSegment()?.points; if (!points?.length) return;
     points.splice(selectedPointIndex ?? points.length - 1, 1); selectedPointIndex = null;
-    renderEditor(); status("Point deleted. Save Net to keep this route.");
+    renderEditor(); status("dev.riscv.deletedPoint");
   });
   el("net-add-segment").addEventListener("click", () => {
     const draft = currentDraft(); const current = currentSegment();
@@ -276,12 +282,12 @@ window.HF = window.HF || {};
     const from = draft.junctions.some((junction) => junction.id === current?.to) ? current.to : "source";
     const segment = { id, from, to: `sink-${id}`, points: [clone(start), { x: Math.min(start.x + 40, geometry.viewBox.width), y: start.y }] };
     draft.segments.push(segment); selectedSegmentId = id; selectedPointIndex = null;
-    populateSegments(); renderEditor(); status("Segment added. Click its points to adjust, then Save Net.");
+    populateSegments(); renderEditor(); status("dev.riscv.addedSegment");
   });
   el("net-delete-segment").addEventListener("click", () => {
     const draft = currentDraft(); draft.segments = draft.segments.filter((segment) => segment.id !== selectedSegmentId);
     selectedSegmentId = draft.segments[0]?.id ?? ""; selectedPointIndex = null;
-    populateSegments(); renderEditor(); status("Segment deleted. Save Net to keep the change.");
+    populateSegments(); renderEditor(); status("dev.riscv.deletedSegment");
   });
   el("net-save").addEventListener("click", saveNet);
   el("net-reset").addEventListener("click", resetNets);
@@ -298,8 +304,8 @@ window.HF = window.HF || {};
       if (payload.diagramId !== geometry.id || !payload.nets || !geometry.nets.every((net) => validNet(payload.nets[net.id]))) throw Error("Invalid net calibration JSON");
       geometry.nets = geometry.nets.map((net) => clone(payload.nets[net.id]));
       netOverrides.clear(); geometry.nets.forEach((net) => netOverrides.set(net.id, clone(net)));
-      netDrafts.clear(); persist(); selectNet(selectedNetId); status("Net calibration imported.");
-    } catch { status("Invalid net calibration JSON."); }
+      netDrafts.clear(); persist(); selectNet(selectedNetId); status("dev.riscv.imported");
+    } catch { status("dev.riscv.invalidJson"); }
     event.target.value = "";
   });
   document.addEventListener("keydown", (event) => {

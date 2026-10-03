@@ -20,6 +20,10 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
   let editState = { editing: false, selectedPathId: null, pointsDraft: null, selectedPointIndex: null };
   let lastRender = { event: null, progress: 0, meta: { status: "ready", index: -1 }, options: {} };
   let lastStateKey = "";
+  const translate = (key, params) => HF.i18n?.t(key, params) ?? key;
+  const popup = document.getElementById("flow-popup");
+  let dismissedPopupIndex = null;
+  popup.querySelector("#flow-popup-close").addEventListener("click", () => { dismissedPopupIndex = lastRender.meta.index; popup.hidden = true; document.getElementById("popup-leader").hidden = true; });
   const makeSvg = (tag, className) => {
     const element = document.createElementNS(NS, tag);
     if (className) element.setAttribute("class", className);
@@ -33,6 +37,20 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     const [first, ...rest] = points.map(scalePoint);
     return `M ${first.x} ${first.y} ${rest.map(({ x, y }) => `L ${x} ${y}`).join(" ")}`;
   };
+  function appendSpotlight() {
+    const mask = makeSvg("mask"); mask.id = "hf-spotlight-mask";
+    mask.setAttribute("maskUnits", "userSpaceOnUse");
+    const base = makeSvg("rect"); base.setAttribute("width", imageSize.width); base.setAttribute("height", imageSize.height); base.setAttribute("fill", "white"); mask.append(base);
+    const cutouts = makeSvg("g", "spotlight-cutouts"); cutouts.setAttribute("filter", "url(#hf-spotlight-soft)"); mask.append(cutouts);
+    const defs = makeSvg("defs");
+    const soft = makeSvg("filter"); soft.id = "hf-spotlight-soft";
+    for (const [key, value] of Object.entries({ x: "-30%", y: "-30%", width: "160%", height: "160%" })) soft.setAttribute(key, value);
+    const blur = makeSvg("feGaussianBlur"); blur.setAttribute("stdDeviation", "12"); soft.append(blur);
+    defs.append(soft, mask); svg.append(defs);
+    const shade = makeSvg("rect", "spotlight-shade"); shade.setAttribute("width", imageSize.width); shade.setAttribute("height", imageSize.height);
+    shade.setAttribute("mask", "url(#hf-spotlight-mask)"); svg.append(shade);
+    container.classList.add("has-spotlight");
+  }
   function viewBoxValues(mode) {
     if (!imageSize) return [0, 0, geometry.viewBox.width, geometry.viewBox.height];
     if (mode === "fit") return [0, 0, imageSize.width, imageSize.height];
@@ -62,6 +80,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     image.setAttribute("href", geometry.image);
     image.setAttribute("width", imageSize.width); image.setAttribute("height", imageSize.height);
     svg.append(image);
+    appendSpotlight();
     const defs = makeSvg("defs"); const arrow = makeSvg("marker");
     for (const [key, value] of Object.entries({ id: "spec-arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "9", markerHeight: "9", orient: "auto" })) arrow.setAttribute(key, value);
     const arrowShape = makeSvg("path"); arrowShape.setAttribute("d", "M 1 1 L 9 5 L 1 9 Z"); arrowShape.setAttribute("fill", "#ff8e5d");
@@ -144,6 +163,92 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     markerLabel.textContent = value ?? "";
     markerGroup.setAttribute("visibility", "visible");
   }
+  function popupAnchor(anchor) {
+    if (!anchor || !imageSize) return null;
+    if (anchor.kind === "node") {
+      const box = nodeGeometry(nodeById.get(anchor.id)?.geometryNodeId)?.box;
+      if (!box) return null;
+      const scaled = scaleBox(box);
+      return { x: scaled.x + scaled.width, y: scaled.y + scaled.height / 2 };
+    }
+    const net = geometry.nets?.find((item) => item.id === anchor.id);
+    const path = geometry.paths?.find((item) => item.id === anchor.id);
+    const segments = net?.segments ?? (path ? [{ points: path.points }] : []);
+    const longest = segments.map((item) => ({ points: item.points, length: item.points.slice(1).reduce((n, point, i) => n + Math.hypot(point.x - item.points[i].x, point.y - item.points[i].y), 0) })).sort((a, b) => b.length - a.length)[0];
+    if (!longest) return null;
+    let remaining = longest.length / 2;
+    for (let i = 1; i < longest.points.length; i++) {
+      const a = longest.points[i - 1], b = longest.points[i];
+      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      if (remaining <= length) return scalePoint({ x: a.x + (b.x - a.x) * remaining / length, y: a.y + (b.y - a.y) * remaining / length });
+      remaining -= length;
+    }
+    return scalePoint(longest.points.at(-1));
+  }
+  function renderPopup(event, progress, meta, options = {}) {
+    if (dismissedPopupIndex !== meta.index) dismissedPopupIndex = null;
+    const show = !!event?.popup && progress >= 1 && document.getElementById("popup-toggle")?.checked !== false && options.popups !== false && dismissedPopupIndex !== meta.index && !editState.editing;
+    popup.hidden = !show;
+    const leader = document.getElementById("popup-leader"); leader.hidden = true;
+    if (!show) return;
+    const data = event.popup, params = data.params ?? {};
+    popup.querySelector("#flow-popup-title").textContent = translate(data.titleKey, params);
+    popup.querySelector("#flow-popup-body").textContent = translate(data.bodyKey, params);
+    const why = popup.querySelector("#flow-popup-why"); why.hidden = !data.whyKey; why.textContent = data.whyKey ? translate(data.whyKey, params) : "";
+    const chips = popup.querySelector("#flow-popup-values"); chips.replaceChildren();
+    Object.entries(params).filter(([key]) => key !== "binaryValue").slice(0, 3).forEach(([key, value]) => {
+      const chip = document.createElement("span"); chip.textContent = `${key} ${value}`; chips.append(chip);
+    });
+    const point = popupAnchor(data.anchor); if (!point) { popup.hidden = true; return; }
+    const matrix = svg.getScreenCTM(), screen = svg.createSVGPoint(); screen.x = point.x; screen.y = point.y;
+    const mapped = screen.matrixTransform(matrix), frame = container.getBoundingClientRect();
+    const anchor = { x: mapped.x - frame.left, y: mapped.y - frame.top };
+    const avoid = [];
+    const ids = event.focusNodes ?? event.activeNodes ?? [];
+    ids.forEach((id) => {
+      const box = nodeGeometry(nodeById.get(id)?.geometryNodeId)?.box; if (!box) return;
+      const scaled = scaleBox(box), p = svg.createSVGPoint(); p.x = scaled.x; p.y = scaled.y;
+      const a = p.matrixTransform(matrix), xScale = Math.hypot(matrix.a, matrix.b), yScale = Math.hypot(matrix.c, matrix.d);
+      avoid.push({ x: a.x - frame.left - 8, y: a.y - frame.top - 8, width: scaled.width * xScale + 16, height: scaled.height * yScale + 16, weight: 100 });
+    });
+    container.querySelectorAll(".net-pill").forEach((pill) => { const r = pill.getBoundingClientRect(); avoid.push({ x: r.left - frame.left - 5, y: r.top - frame.top - 5, width: r.width + 10, height: r.height + 10, weight: 100 }); });
+    const focus = event.focusNets ?? [];
+    focus.forEach((id) => (netSegments.get(id) ?? []).forEach(({ path }) => {
+      const length = path.getTotalLength();
+      for (let n = 0; n <= 8; n++) { const p = path.getPointAtLength(length * n / 8).matrixTransform(matrix); avoid.push({ x: p.x - frame.left - 16, y: p.y - frame.top - 16, width: 32, height: 32 }); }
+    }));
+    const title = popup.querySelector("#flow-popup-title");
+    title.title = title.textContent;
+    const measure = document.createElement("canvas").getContext("2d");
+    measure.font = getComputedStyle(title).font;
+    const desiredWidth = Math.min(frame.width - 24, Math.max(330, Math.ceil(measure.measureText(title.textContent).width + 66)));
+    const overlap = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    let width = desiredWidth, height, target, score = Infinity;
+    for (let trial = desiredWidth; trial >= 250; trial -= 20) {
+      title.style.whiteSpace = trial + 2 < desiredWidth ? "normal" : "nowrap";
+      popup.style.width = `${trial}px`; popup.style.left = "0px"; popup.style.top = "0px";
+      const trialHeight = popup.offsetHeight;
+      const candidate = HF.placePopup(anchor, avoid, { width: frame.width, height: frame.height }, { width: trial, height: trialHeight });
+      const rect = { x: candidate.x, y: candidate.y, width: trial, height: trialHeight };
+      const candidateScore = avoid.reduce((total, item) => total + overlap(rect, item) * (item.weight ?? 1), 0);
+      if (candidateScore < score) { width = trial; height = trialHeight; target = candidate; score = candidateScore; }
+      if (score < 1) break;
+    }
+    popup.style.width = `${width}px`;
+    title.style.whiteSpace = width + 2 < desiredWidth ? "normal" : "nowrap";
+    popup.style.left = `${target.x}px`; popup.style.top = `${target.y}px`;
+    popup.dataset.side = target.side;
+    const tail = popup.querySelector("#flow-popup-tail");
+    tail.hidden = target.fallback;
+    tail.style.left = `${Math.max(12, Math.min(width - 12, anchor.x - target.x))}px`;
+    tail.style.top = `${Math.max(12, Math.min(height - 12, anchor.y - target.y))}px`;
+    if (target.fallback) {
+      leader.hidden = false; leader.setAttribute("viewBox", `0 0 ${frame.width} ${frame.height}`);
+      const line = leader.querySelector("line"); line.setAttribute("x1", anchor.x); line.setAttribute("y1", anchor.y);
+      line.setAttribute("x2", Math.max(target.x, Math.min(target.x + width, anchor.x)));
+      line.setAttribute("y2", Math.max(target.y, Math.min(target.y + height, anchor.y)));
+    }
+  }
   function render(event, progress, meta, options = {}) {
     if (geometry.presentation === "net-graph") { renderNets(event, progress, meta, options); return; }
     lastRender = { event, progress, meta, options };
@@ -180,6 +285,8 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         group.classList.toggle("is-passed", false);
       });
       renderNodeChips(event && phase === "source" ? [sourceId] : []);
+      const spotlightNodes = phase === "source" ? [sourceId] : phase === "arrival" ? [sourceId, sinkId] : [sourceId];
+      renderSpotlight(event, phase, travel, new Set(spotlightNodes.filter(Boolean)), new Set([edge?.pathId].filter(Boolean)), options);
       const path = pathElements.get(edge?.pathId ?? edgeById.get(flow.order.at(-1))?.pathId);
       if (event && path && (phase !== "source" || terminal)) {
         const length = path.getTotalLength();
@@ -193,21 +300,23 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     const stageIndex = Math.max(0, flow.nodes.findIndex((node) => node.id === currentNodeId));
     const node = nodeById.get(currentNodeId);
     const shownValues = event?.values ?? options.inputValue;
-    document.getElementById("status-value").textContent = imageSize ? ({ running: "Running", paused: "Paused", done: "Done" }[meta.status] ?? "Ready") : "Diagram unavailable";
+    document.getElementById("status-value").textContent = imageSize ? translate(`ui.${meta.status === "waiting" ? "waiting" : meta.status}`) : translate("ui.unavailable");
     document.getElementById("step-value").textContent = `${event ? stageIndex + 1 : 0} / ${flow.nodes.length}`;
     document.getElementById("path-value").textContent = node?.label ?? "—";
     document.getElementById("data-value").textContent = shownValues?.hexValue ?? "—";
     document.getElementById("binary-value").textContent = shownValues?.binaryValue ?? "—";
-    document.getElementById("description-value").textContent = event ? (meta.trace?.events[stageIndex]?.note ?? event.note) : flow.readyNote;
+    document.getElementById("description-value").textContent = event ? translate(meta.trace?.events[stageIndex]?.note ?? event.note, event.popup?.params) : translate(flow.readyNoteKey ?? "");
     const ref = flow.specRef;
     const verified = !!(ref?.doc && ref?.section && Number.isInteger(ref.page) && ref.page > 0 && Array.isArray(ref.signals) && ref.signals.length);
     const refElement = document.getElementById("spec-ref-value");
-    refElement.textContent = verified ? `${ref.doc}, ${ref.section}, p. ${ref.page} (${ref.signals.join(", ")})` : "Unverified — no specRef";
+    refElement.textContent = verified ? `${ref.doc}, ${ref.section}, p. ${ref.page} (${ref.signals.join(", ")})` : translate("ui.unverifiedLong");
     refElement.classList.toggle("unverified", !verified);
+    const chip = document.getElementById("spi-spec-chip");
+    if (chip) { chip.textContent = verified ? `${ref.doc}, p. ${ref.page}` : translate("ui.unverified"); chip.classList.toggle("unverified", !verified); }
     document.getElementById("destination-row").hidden = !terminal;
     document.getElementById("destination-value").textContent = flow.nodes.at(-1)?.label ?? "—";
     const runButton = document.getElementById("run-button");
-    runButton.textContent = ({ running: "Pause Ⅱ", done: "Replay ↺", paused: "Resume →" }[meta.status] ?? "Run →");
+    runButton.textContent = translate(({ running: "ui.pause", done: "ui.replay", paused: "ui.resume", waiting: "ui.next" }[meta.status] ?? "ui.run"));
     runButton.disabled = !imageSize || !options.inputValid;
     document.getElementById("step-button").disabled = !imageSize || !options.inputValid || meta.status === "running" || terminal;
     document.getElementById("previous-button").disabled = meta.status === "running" || meta.index <= 0;
@@ -219,6 +328,8 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       button.disabled = meta.status === "running" || !imageSize || !options.inputValid;
       button.querySelector(".stage-symbol").textContent = terminal || (!!event && index < stageIndex) ? "✓" : String(index + 1);
     });
+    HF.updateProgressUI?.("spi", event, meta);
+    renderPopup(event, progress, meta, options);
   }
   function renderTimeline(onSeek, trace) {
     if (geometry.presentation === "net-graph") { renderNetTimeline(onSeek, trace); return; }
@@ -227,7 +338,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       const item = document.createElement("li"); const button = document.createElement("button");
       button.type = "button"; button.className = "timeline-stage";
       const symbol = document.createElement("span"); symbol.className = "stage-symbol"; symbol.textContent = String(index + 1);
-      const name = document.createElement("span"); name.className = "stage-name"; name.textContent = node.label;
+      const name = document.createElement("span"); name.className = "stage-name"; name.textContent = translate(node.labelKey ?? node.label);
       button.append(symbol, name); button.addEventListener("click", () => onSeek(index)); item.append(button); list.append(item);
     });
   }
@@ -237,7 +348,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     zoomFrame = null;
     const from = (svg.getAttribute("viewBox") || viewBoxValues("fit").join(" ")).split(/\s+/).map(Number);
     const to = [target.x, target.y, target.width, target.height];
-    if (instant || from.every((value, index) => Math.abs(value - to[index]) < .01)) {
+    if (instant || window.matchMedia("(prefers-reduced-motion: reduce)").matches || from.every((value, index) => Math.abs(value - to[index]) < .01)) {
       svg.setAttribute("viewBox", to.join(" ")); updateMarkerSize(); return;
     }
     const start = performance.now();
@@ -256,19 +367,21 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     const focusNetIds = event.focusNets ?? (event.activeEdges ?? []).map((id) => edgeById.get(id)?.pathId).filter(Boolean);
     const focusNodeIds = event.focusNodes ?? event.activeNodes ?? [];
     const nodeBoxes = focusNodeIds.map((id) => nodeGeometry(nodeById.get(id)?.geometryNodeId)?.box).filter(Boolean);
-    const boxes = nodeBoxes.map(scaleBox);
+    const boxes = nodeBoxes.map((box) => { const scaled = scaleBox(box); return { x: scaled.x - 16, y: Math.max(0, scaled.y - 34), width: scaled.width + 32, height: scaled.height + 50 }; });
     const pointNearFocus = (point) => nodeBoxes.some((box) => point.x >= box.x - 35 && point.x <= box.x + box.width + 35 && point.y >= box.y - 35 && point.y <= box.y + box.height + 35);
     focusNetIds.forEach((id) => {
       const path = geometry.paths?.find((item) => item.id === id);
       const net = geometry.nets?.find((item) => item.id === id);
       const segments = path ? [{ points: path.points, from: "source" }] : net?.segments ?? [];
       segments.filter((segment) => !event.focusNodes || segment.to?.startsWith("j") || pointNearFocus(segment.points.at(-1))).forEach((segment) => {
-        segment.points.forEach((point) => { const scaled = scalePoint(point); boxes.push({ x: scaled.x, y: scaled.y, width: 0, height: 0 }); });
+        segment.points.forEach((point) => { const scaled = scalePoint(point); boxes.push({ x: scaled.x - 22, y: scaled.y - 30, width: 44, height: 60 }); });
       });
     });
     const area = svg.getBoundingClientRect();
+    const midX = boxes.length ? (Math.min(...boxes.map((box) => box.x)) + Math.max(...boxes.map((box) => box.x + box.width))) / 2 : imageSize.width / 2;
     return HF.computeCameraViewBox({ imageWidth: imageSize.width, imageHeight: imageSize.height,
-      viewportWidth: area.width || 1, viewportHeight: area.height || 1, focusBoxes: boxes });
+      viewportWidth: area.width || 1, viewportHeight: area.height || 1, focusBoxes: boxes,
+      padding: .18, popupSide: event.popup ? (midX < imageSize.width / 2 ? "right" : "left") : "auto" });
   }
   function followEvent(event, meta) {
     if (!followEnabled || editState.editing || meta.index === followedIndex) return;
@@ -343,6 +456,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     image.setAttribute("href", geometry.image);
     image.setAttribute("width", imageSize.width); image.setAttribute("height", imageSize.height);
     svg.append(image);
+    appendSpotlight();
     const blockLayer = makeSvg("g", "block-overlay");
     flow.nodes.forEach((node) => {
       const geometryNode = nodeGeometry(node.geometryNodeId);
@@ -365,14 +479,17 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         const path = makeSvg("path", "net-base");
         const draft = editState.editing && editState.selectedNetId === netGeometry.id && editState.selectedSegmentId === segment.id ? editState.pointsDraft : null;
         path.setAttribute("d", pathData(draft ?? segment.points));
+        const casing = makeSvg("path", "net-casing"); casing.setAttribute("d", path.getAttribute("d"));
         const fill = makeSvg("path", "net-fill"); fill.setAttribute("d", path.getAttribute("d"));
+        const inner = makeSvg("path", "net-inner"); inner.setAttribute("d", path.getAttribute("d"));
+        const direction = makeSvg("path", "net-direction"); direction.setAttribute("d", path.getAttribute("d"));
         const pulse = makeSvg("circle", "net-pulse"); pulse.setAttribute("r", "13"); pulse.setAttribute("visibility", "hidden");
-        segmentGroup.append(path, fill, pulse);
+        segmentGroup.append(path, casing, fill, inner, direction, pulse);
         if (editState.editing) {
           segmentGroup.classList.toggle("is-selected", netGeometry.id === editState.selectedNetId && segment.id === editState.selectedSegmentId);
           path.addEventListener("click", (event) => { event.stopPropagation(); onSelectNet(netGeometry.id, segment.id); });
         }
-        group.append(segmentGroup); items.push({ segment, path, fill, pulse, group: segmentGroup });
+        group.append(segmentGroup); items.push({ segment, path, casing, fill, inner, direction, pulse, group: segmentGroup });
       });
       netSegments.set(netGeometry.id, items);
       visibleNet.junctions.forEach((junction) => {
@@ -409,9 +526,33 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     trace.events.forEach((event, index) => {
       const button = document.createElement("button"); button.type = "button";
       button.className = "net-timeline-step"; button.dataset.level = String(index + 1);
-      button.textContent = `${index + 1} · ${event.caption}`;
+      button.textContent = `${index + 1} · ${translate(event.captionKey ?? event.caption, event.popup?.params)}`;
       button.addEventListener("click", () => onSeek(index)); netUI.timeline.append(button);
     });
+  }
+  function renderSpotlight(event, phase, travel, focusNodes, focusNets, options) {
+    const shade = svg.querySelector(".spotlight-shade"), cutouts = svg.querySelector(".spotlight-cutouts");
+    if (!shade || !cutouts) return;
+    shade.setAttribute("visibility", event && options.dim !== false ? "visible" : "hidden");
+    cutouts.replaceChildren();
+    if (!event || options.dim === false) return;
+    const matrix = svg.getScreenCTM(); const scale = matrix ? Math.max(.01, Math.hypot(matrix.a, matrix.b)) : 1;
+    svg.querySelector("#hf-spotlight-soft feGaussianBlur")?.setAttribute("stdDeviation", String(9 / scale));
+    focusNodes.forEach((id) => {
+      const box = nodeGeometry(nodeById.get(id)?.geometryNodeId)?.box; if (!box) return;
+      const b = scaleBox(box), pad = 24 / scale;
+      const rect = makeSvg("rect"); rect.setAttribute("x", b.x - pad); rect.setAttribute("y", b.y - pad);
+      rect.setAttribute("width", b.width + 2 * pad); rect.setAttribute("height", b.height + 2 * pad);
+      rect.setAttribute("rx", 18 / scale); rect.setAttribute("fill", "black"); cutouts.append(rect);
+    });
+    if (phase === "source") return;
+    focusNets.forEach((id) => (netSegments.get(id) ?? (pathElements.get(id) ? [{ path: pathElements.get(id) }] : [])).forEach(({ path }) => {
+      const length = path.getTotalLength();
+      const cut = makeSvg("path"); cut.setAttribute("d", path.getAttribute("d")); cut.setAttribute("fill", "none");
+      cut.setAttribute("stroke", "black"); cut.setAttribute("stroke-width", 48 / scale); cut.setAttribute("stroke-linecap", "round");
+      cut.setAttribute("stroke-linejoin", "round"); cut.setAttribute("stroke-dasharray", `${length} ${length}`);
+      cut.setAttribute("stroke-dashoffset", String((1 - (phase === "arrival" ? 1 : travel)) * length)); cutouts.append(cut);
+    }));
   }
   function renderNets(event, progress, meta, options = {}) {
     lastRender = { event, progress, meta, options };
@@ -488,7 +629,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         }
         const lengths = items.map((item) => ({ item, start: distanceTo(item.segment.from), length: item.path.getTotalLength() }));
         const total = Math.max(1, ...lengths.map(({ start, length }) => start + length));
-        items.forEach(({ path, fill, pulse, group, segment }, index) => {
+        items.forEach(({ path, casing, fill, inner, direction, pulse, group, segment }, index) => {
           const isSelect = selectors.has(netGeometry.id) && (!story || isFocus);
           const isUnselected = unselectedInputs.get(netGeometry.id)?.has(segment.to);
           const isSelected = selectedInputs.get(netGeometry.id)?.has(segment.to);
@@ -504,13 +645,20 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
           group.classList.toggle("is-secondary-segment", isFocus && !branchFocused);
           const own = lengths[index];
           const fraction = pulseThis ? Math.max(0, Math.min(1, (travel * total - own.start) / Math.max(1, own.length))) : 0;
-          fill.style.strokeDasharray = `${own.length} ${own.length}`;
-          fill.style.strokeDashoffset = String((1 - fraction) * own.length);
-          fill.setAttribute("visibility", fraction > 0 ? "visible" : "hidden");
+          for (const layer of [casing, fill, inner, direction]) {
+            layer.style.strokeDasharray = layer === direction ? "8 17" : `${own.length} ${own.length}`;
+            layer.style.strokeDashoffset = layer === direction ? String(-travel * 48) : String((1 - fraction) * own.length);
+            layer.setAttribute("visibility", fraction > 0 ? "visible" : "hidden");
+          }
+          if (fraction > 0) {
+            const count = Math.max(2, Math.ceil(own.length * fraction / 12));
+            const points = Array.from({ length: count + 1 }, (_, n) => path.getPointAtLength(own.length * fraction * n / count));
+            direction.setAttribute("d", `M ${points[0].x} ${points[0].y} ${points.slice(1).map((point) => `L ${point.x} ${point.y}`).join(" ")}`);
+          }
           if (phase === "wire" && fraction > 0 && fraction < 1) {
             const point = path.getPointAtLength(own.length * fraction);
             pulse.setAttribute("cx", point.x); pulse.setAttribute("cy", point.y);
-            pulse.setAttribute("r", String(6 / Math.max(.01, xScale)));
+            pulse.setAttribute("r", String(8 / Math.max(.01, xScale)));
             pulse.setAttribute("visibility", "visible");
           } else pulse.setAttribute("visibility", "hidden");
         });
@@ -520,7 +668,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         const screen = midpoint.matrixTransform(matrix);
         const labelText = `${net?.label ?? netGeometry.id} = ${signal.value}`;
         const widthPx = Math.max(94, labelText.length * 8 + 20), heightPx = 27;
-        const offsets = [[14, -37], [14, 17], [-widthPx - 14, -37], [-widthPx - 14, 17], [18, -66], [18, 47]];
+        const offsets = [[14, 17], [14, -37], [-widthPx - 14, 17], [-widthPx - 14, -37], [18, 47], [18, -66]];
         const ownSamples = Array.from({ length: 9 }, (_, i) => candidate.path.getPointAtLength(candidate.path.getTotalLength() * i / 8).matrixTransform(matrix));
         let target = null;
         for (const [dx, dy] of offsets) {
@@ -542,9 +690,10 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         pill.append(rect, label); pillLayer.append(pill);
         if (!story && unused.has(netGeometry.id)) {
           const hint = makeSvg("text", "net-unused-hint"); hint.setAttribute("x", local.x); hint.setAttribute("y", local.y + 37 / yScale);
-          hint.setAttribute("font-size", 10 / yScale); hint.textContent = "computed, not used"; pillLayer.append(hint);
+          hint.setAttribute("font-size", 10 / yScale); hint.textContent = translate("ui.unusedHint"); pillLayer.append(hint);
         }
       });
+      renderSpotlight(event, phase, travel, focusNodes, focusNets, options);
       if (selectionLayer && phase !== "source") {
         selectedInputs.forEach((muxIds, netId) => {
           (netSegments.get(netId) ?? []).forEach(({ segment, path }) => {
@@ -564,14 +713,14 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       });
       renderNodeChips(event && phase === "source" ? [...sourceNodes] : []);
     }
-    netUI.badge.textContent = trace?.badge ?? flow.badge ?? "";
+    netUI.badge.textContent = translate(trace?.badgeKey ?? flow.badgeKey ?? "ui.dependency");
     const ref = flow.specRef;
     const verified = !!(ref?.doc && ref?.section && Number.isInteger(ref.page) && ref.page > 0 && Array.isArray(ref.signals) && ref.signals.length);
-    netUI.specRef.textContent = verified ? `${ref.doc}, ${ref.section}, p. ${ref.page}` : "Unverified — no specRef";
+    netUI.specRef.textContent = verified ? `${ref.doc}, ${ref.section}, p. ${ref.page}` : translate("ui.unverified");
     netUI.specRef.classList.toggle("unverified", !verified);
-    netUI.status.textContent = imageSize ? ({ running: "Running", waiting: "Waiting for next", paused: "Paused", done: "Done" }[meta.status] ?? "Ready") : "Diagram unavailable";
+    netUI.status.textContent = imageSize ? translate(`ui.${meta.status}`) : translate("ui.unavailable");
     netUI.level.textContent = `${event ? meta.index + 1 : 0} / ${trace?.events.length ?? 0}`;
-    netUI.run.textContent = ({ running: "Pause Ⅱ", waiting: "Next →", done: "Replay ↺", paused: meta.pacing === "guided" ? "Next →" : "Resume →" }[meta.status] ?? "Run →");
+    netUI.run.textContent = translate(({ running: "ui.pause", waiting: "ui.next", done: "ui.replay", paused: meta.pacing === "guided" ? "ui.next" : "ui.resume" }[meta.status] ?? "ui.run"));
     netUI.run.disabled = !imageSize || !options.inputValid;
     netUI.step.disabled = !imageSize || !options.inputValid || meta.status === "running" || meta.status === "done";
     netUI.previous.disabled = meta.status === "running" || meta.index <= 0;
@@ -598,20 +747,20 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       state.forEach((item, key) => {
         const row = document.createElement("div"); row.className = "state-row";
         row.classList.toggle("is-written", changed.has(key));
-        const label = document.createElement("span"); label.textContent = `${flow.nodes.find((node) => node.id === item.node)?.label ?? item.node}.${item.field}`;
+        const label = document.createElement("span"); label.textContent = item.field === "value" ? (flow.nodes.find((node) => node.id === item.node)?.label ?? item.node) : item.field;
         const value = document.createElement("strong"); value.textContent = item.value;
         row.append(label, value); netUI.state.append(row);
       });
     }
     if (netUI.caption) {
-      netUI.caption.hidden = !event; netUI.caption.textContent = event?.caption ?? "";
-      netUI.stepMeta.textContent = `Step ${event ? meta.index + 1 : 0} / ${trace?.events.length ?? 0}`;
+      netUI.caption.hidden = !event; netUI.caption.textContent = event ? translate(event.captionKey ?? event.caption, event.popup?.params) : "";
+      netUI.stepMeta.textContent = translate("ui.step", { n: event ? meta.index + 1 : 0, total: trace?.events.length ?? 0 });
       const parallelPrevious = !!event && meta.index > 0 && event.dependencyLevel === trace.events[meta.index - 1].dependencyLevel;
       const parallelNext = !!event && meta.index < trace.events.length - 1 && event.dependencyLevel === trace.events[meta.index + 1].dependencyLevel;
       const parallel = parallelPrevious || parallelNext;
       netUI.parallel.hidden = !parallel;
-      netUI.parallel.textContent = parallel ? `happens at the same time as step ${parallelPrevious ? meta.index : meta.index + 2}` : "";
-      netUI.detail.textContent = event?.detail ?? "";
+      netUI.parallel.textContent = parallel ? translate("ui.parallel", { n: parallelPrevious ? meta.index : meta.index + 2 }) : "";
+      netUI.detail.textContent = event ? translate(event.detailKey ?? event.detail, event.popup?.params) : "";
       const controls = new Map();
       trace?.events.slice(0, meta.index + 1).forEach((item) => item.activeNets.filter((net) => net.role === "control" && !item.unused.includes(net.id)).forEach((net) => controls.set(net.id, net)));
       netUI.controls.replaceChildren();
@@ -621,12 +770,14 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         chip.textContent = `${netById.get(net.id)?.label ?? net.id} = ${net.value}`; netUI.controls.append(chip);
       });
       netUI.unused.hidden = !story || !unused.size;
-      netUI.unusedButton.textContent = `Computed but not used (${unused.size})`;
+      netUI.unusedButton.textContent = translate("ui.unused", { n: unused.size });
       netUI.unusedList.hidden = !options.revealUnused;
       netUI.unusedList.textContent = [...unused].map((id) => netById.get(id)?.label ?? id).join(" · ");
       netUI.nextPrompt.hidden = meta.status !== "waiting";
       netUI.footer.hidden = !!editState.editing;
     }
+    HF.updateProgressUI?.("riscv", event, meta);
+    renderPopup(event, progress, meta, options);
   }
 
   return {

@@ -18,11 +18,12 @@ const renderer = HF.createSpecRenderer({
   onSelectPoint: (index) => {
     selectedPointIndex = index;
     renderEditorOverlay();
-    updateEditorStatus(`Point ${index + 1} selected. Click its new position on the diagram.`);
+    updateEditorStatus("dev.spi.selected", { n: index + 1 });
   }
 });
 const player = HF.createTracePlayer({
   durationForEvent: (event, index) => renderer.durationForEvent(event, index),
+  holdForEvent: (event) => document.getElementById("popup-toggle")?.checked !== false ? HF.popupHoldMs(event?.popup, HF.i18n.t) : 1800,
   onChange: (event, progress, meta) => { if (activeDiagram === "spi") renderer.render(event, progress, meta, { dim: dimEnabled, inputValid: !!currentInputValue, inputValue: currentInputValue }); }
 });
 HF.spiController = { renderer, player };
@@ -67,7 +68,7 @@ function updateInputFeedback() {
   currentInputValue = parseTxData(input.value);
   input.setAttribute("aria-invalid", String(!currentInputValue));
   error.hidden = !!currentInputValue;
-  error.textContent = currentInputValue ? "" : "Enter 0x00–0xFF or exactly eight binary digits.";
+  error.textContent = currentInputValue ? "" : HF.i18n.t("ui.invalidByte");
   player.refresh();
   return !!currentInputValue;
 }
@@ -93,13 +94,16 @@ function loadSpecImage() {
 function renderEditorOverlay() {
   renderer.renderStatic({ editing: editingPaths, selectedPathId, pointsDraft: pathDrafts.get(selectedPathId) ?? null, selectedPointIndex });
 }
-function updateEditorStatus(message) {
+let lastEditorStatus = { key: "dev.spi.points", params: {} };
+function updateEditorStatus(key = "dev.spi.points", params = {}) {
+  lastEditorStatus = { key, params };
   const points = pathDrafts.get(selectedPathId) ?? pathById(selectedPathId).points;
   document.getElementById("undo-point-button").disabled = !points.length;
   document.getElementById("clear-path-button").disabled = !points.length;
   document.getElementById("save-path-button").disabled = points.length < 2;
-  document.getElementById("editor-status").textContent = message ?? `${points.length} control points. Select a point to move it, or click to add one.`;
+  document.getElementById("editor-status").textContent = HF.i18n.t(key, { n: points.length, ...params });
 }
+HF.refreshSpiEditorStatus = () => updateEditorStatus(lastEditorStatus.key, lastEditorStatus.params);
 function selectEditorPath(id) {
   selectedPathId = id; selectedPointIndex = null;
   document.getElementById("path-select").value = id;
@@ -111,23 +115,23 @@ function diagramClickToPoint(event) {
   const points = pathDrafts.get(selectedPathId) ?? copyPoints(pathById(selectedPathId).points);
   if (selectedPointIndex === null) points.push(point); else points[selectedPointIndex] = point;
   pathDrafts.set(selectedPathId, points);
-  const message = selectedPointIndex === null ? `Added point at (${point.x}, ${point.y}). Save Path to keep this route.` : `Moved point to (${point.x}, ${point.y}). Save Path to keep this route.`;
-  selectedPointIndex = null; renderEditorOverlay(); updateEditorStatus(message);
+  const message = selectedPointIndex === null ? "dev.spi.added" : "dev.spi.moved";
+  selectedPointIndex = null; renderEditorOverlay(); updateEditorStatus(message, point);
 }
 function saveSelectedPath() {
   const points = pathDrafts.get(selectedPathId) ?? copyPoints(pathById(selectedPathId).points);
-  if (!validPoints(points)) { updateEditorStatus("A path needs at least two points inside the diagram."); return; }
+  if (!validPoints(points)) { updateEditorStatus("dev.spi.invalidPath"); return; }
   pathById(selectedPathId).points = copyPoints(points); pathOverrides.set(selectedPathId, copyPoints(points)); syncSpiNets();
-  try { persistPaths(); updateEditorStatus("Path saved in this browser. It will survive a reload."); }
-  catch { updateEditorStatus("Path updated for this session, but browser storage is unavailable."); }
+  try { persistPaths(); updateEditorStatus("dev.spi.saved"); }
+  catch { updateEditorStatus("dev.spi.savedSession"); }
   renderEditorOverlay();
 }
 function resetCalibration() {
   pathOverrides.clear(); boundsOverrides.clear(); pathDrafts.clear(); selectedPointIndex = null;
   geometry.paths = JSON.parse(JSON.stringify(HF.geometry.paths)); geometry.nodes = JSON.parse(JSON.stringify(HF.geometry.nodes)); syncSpiNets();
-  let message = "Default TX routes and block bounds restored.";
+  let message = "dev.spi.reset";
   try { localStorage.removeItem(CALIBRATION_KEY); localStorage.removeItem(BOUNDS_KEY); }
-  catch { message = "Defaults restored for this session, but browser storage could not be cleared."; }
+  catch { message = "dev.spi.resetSession"; }
   renderEditorOverlay(); updateEditorStatus(message); showBounds();
 }
 function setSpecMode(edit) {
@@ -146,6 +150,7 @@ function setSpecMode(edit) {
   }
   document.getElementById("spec-summary").textContent = edit ? "Adjust TX routes" : "Calibrated TX routes";
   renderEditorOverlay();
+  HF.translateUI?.();
   if (edit) updateEditorStatus(); else player.refresh();
 }
 function showBounds() {
@@ -182,11 +187,11 @@ function init() {
   document.getElementById("undo-point-button").addEventListener("click", () => {
     const points = pathDrafts.get(selectedPathId) ?? copyPoints(pathById(selectedPathId).points);
     points.pop(); pathDrafts.set(selectedPathId, points); selectedPointIndex = null;
-    renderEditorOverlay(); updateEditorStatus("Last point removed. Save Path to keep this route.");
+    renderEditorOverlay(); updateEditorStatus("dev.spi.undo");
   });
   document.getElementById("clear-path-button").addEventListener("click", () => {
     pathDrafts.set(selectedPathId, []); selectedPointIndex = null;
-    renderEditorOverlay(); updateEditorStatus("Path cleared. Click along the visible connection to rebuild it.");
+    renderEditorOverlay(); updateEditorStatus("dev.spi.cleared");
   });
   document.getElementById("save-path-button").addEventListener("click", saveSelectedPath);
   document.getElementById("reset-calibration-button").addEventListener("click", resetCalibration);
@@ -206,8 +211,8 @@ function init() {
       geometry.paths.forEach((path) => { path.points = copyPoints(payload.paths[path.id]); pathOverrides.set(path.id, copyPoints(path.points)); });
       geometry.nodes.forEach((node) => { node.box = { ...payload.bounds[node.id] }; boundsOverrides.set(node.id, { ...node.box }); });
       try { persistPaths(); persistBounds(); } catch { /* Keep imported values in this session. */ }
-      syncSpiNets(); pathDrafts.clear(); renderEditorOverlay(); updateEditorStatus("Calibration imported."); showBounds();
-    } catch { updateEditorStatus("Invalid calibration JSON."); }
+      syncSpiNets(); pathDrafts.clear(); renderEditorOverlay(); updateEditorStatus("dev.spi.imported"); showBounds();
+    } catch { updateEditorStatus("dev.spi.invalidJson"); }
     event.target.value = "";
   });
   document.getElementById("fit-button").addEventListener("click", () => (activeDiagram === "riscv" ? HF.riscvController.renderer : renderer).setZoom("fit"));
@@ -222,10 +227,10 @@ function init() {
   boundsSelect.addEventListener("change", showBounds); showBounds();
   document.getElementById("save-bounds-button").addEventListener("click", () => {
     const box = Object.fromEntries(["x", "y", "width", "height"].map((field) => [field, Number(document.getElementById(`bounds-${field}`).value)]));
-    if (!validBox(box)) { updateEditorStatus("Enter valid positive block bounds."); return; }
+    if (!validBox(box)) { updateEditorStatus("dev.spi.invalidBounds"); return; }
     const id = boundsSelect.value; nodeById(id).box = box; boundsOverrides.set(id, { ...box });
-    try { persistBounds(); updateEditorStatus("Block bounds saved."); }
-    catch { updateEditorStatus("Bounds updated for this session; storage is unavailable."); }
+    try { persistBounds(); updateEditorStatus("dev.spi.boundsSaved"); }
+    catch { updateEditorStatus("dev.spi.boundsSession"); }
     renderEditorOverlay();
   });
   document.addEventListener("keydown", (event) => {

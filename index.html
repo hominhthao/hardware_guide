@@ -10,6 +10,10 @@
     <script src="data/flow.js" defer></script>
     <script src="data/riscvGeometry.js" defer></script>
     <script src="data/riscvDesign.js" defer></script>
+    <script src="data/i18n/en.js" defer></script>
+    <script src="data/i18n/vi.js" defer></script>
+    <script src="src/i18n.js" defer></script>
+    <script src="src/popup.js" defer></script>
     <script src="src/spiTxTrace.js" defer></script>
     <script src="src/riscvAddTrace.js" defer></script>
     <script src="src/player.js" defer></script>
@@ -17,6 +21,7 @@
     <script src="src/renderer.js" defer></script>
     <script src="app.js" defer></script>
     <script src="src/riscvApp.js" defer></script>
+    <script src="src/ui.js" defer></script>
   </head>
   <body class="spec-active">
     <div class="page-shell">
@@ -33,12 +38,14 @@
             <button id="spi-diagram-button" class="mode-button is-selected" type="button" aria-pressed="true">SPI TX</button>
             <button id="riscv-diagram-button" class="mode-button" type="button" aria-pressed="false">RISC-V single-cycle</button>
           </div>
-          <div id="spec-mode-switch" class="spec-mode-switch" role="group" aria-label="Specification mode">
+          <div id="spec-mode-switch" class="spec-mode-switch" role="group" aria-label="Specification mode" hidden>
             <button id="view-flow-mode" class="mode-button is-selected" type="button" aria-pressed="true">View Flow</button>
             <button id="edit-paths-mode" class="mode-button" type="button" aria-pressed="false">Edit Paths</button>
           </div>
         </div>
-        <span class="version">v0.3.5</span>
+        <button id="language-toggle" type="button" aria-label="Language: VI or EN">VI | EN</button>
+        <button id="settings-button" type="button" aria-expanded="false" aria-controls="settings-drawer">⚙ <span data-i18n="ui.settings">Settings</span></button>
+        <span class="version">v0.3.6</span>
       </header>
 
       <main>
@@ -51,7 +58,9 @@
                     <strong>SPI specification diagram not found</strong>
                     <span>Place the original SPI block diagram at <code>assets/spi_block_diagram.png</code>.</span>
                   </div>
-                  <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div><button id="fit-button" type="button">Overview</button><button id="focus-button" type="button" aria-pressed="false">Follow</button></div></div>
+                  <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div hidden><button id="fit-button" type="button">Overview</button><button id="focus-button" type="button" aria-pressed="false">Follow</button></div></div>
+                  <div id="flow-popup" class="flow-popup" role="dialog" aria-live="polite" hidden><button id="flow-popup-close" type="button" aria-label="Close explanation">×</button><strong id="flow-popup-title"></strong><p id="flow-popup-body"></p><p id="flow-popup-why"></p><div id="flow-popup-values"></div><span id="flow-popup-tail" aria-hidden="true"></span></div>
+                  <svg id="popup-leader" aria-hidden="true" hidden><line></line></svg>
                   <span id="spi-fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
                   <svg id="spec-overlay" class="spec-overlay" role="img" aria-label="Original SPI specification diagram with transmit dataflow paths" hidden></svg>
                 </div>
@@ -110,7 +119,7 @@
                     <label>Initial PC <input id="riscv-pc" value="0" inputmode="text"></label>
                   </div>
                   <p class="input-help">32-bit unsigned hex (0x…) or decimal</p>
-                  <p class="input-help">Instruction: <strong>0x002081B3</strong></p>
+                  <p class="input-help" id="instruction-label">Instruction: <strong>0x002081B3</strong></p>
                   <p id="riscv-error" class="input-error" role="alert" hidden></p>
                   <div class="story-options"><div class="segmented" role="group" aria-label="Presentation"><button id="riscv-story" class="is-selected" type="button" aria-pressed="true">Story</button><button id="riscv-full" type="button" aria-pressed="false">Full</button></div><div class="segmented" role="group" aria-label="Pacing"><button id="riscv-guided" class="is-selected" type="button" aria-pressed="true">Guided</button><button id="riscv-auto" type="button" aria-pressed="false">Auto</button></div></div>
                   <div class="playback-options"><label>Speed <select id="riscv-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label class="dim-toggle"><input id="riscv-dim" type="checkbox" checked> Dim background</label></div>
@@ -124,6 +133,14 @@
                   <div class="state-heading"><span class="info-label">State</span><span id="riscv-spec-ref" class="unverified">Unverified — no specRef</span></div>
                   <div id="riscv-state" class="state-list"></div>
                 </div>
+              </div>
+              <div id="settings-drawer" class="settings-drawer" hidden>
+                <div class="settings-title"><strong data-i18n="ui.settings">Settings</strong><button id="settings-close" type="button" aria-label="Close settings">×</button></div>
+                <div class="settings-group"><h3 data-i18n="ui.playback">Playback</h3><div id="settings-playback"></div></div>
+                <div class="settings-group"><h3 data-i18n="ui.view">View</h3><div id="settings-view"></div><label><input id="popup-toggle" type="checkbox" checked> <span data-i18n="ui.popups">Pop-ups</span></label></div>
+                <div class="settings-group"><h3 data-i18n="ui.language">Language</h3><div id="settings-language"></div></div>
+                <div class="settings-group"><h3 data-i18n="ui.developer">Developer tools</h3><div id="settings-developer"></div></div>
+                <small id="keyboard-help" title="Space / Right: Next · Left: Back · R: Reset"></small>
               </div>
               <div id="net-editor-panel" class="editor-panel" hidden>
                 <p class="eyebrow">Calibration / net graph</p><h2>Edit nets</h2>

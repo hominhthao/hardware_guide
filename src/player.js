@@ -1,5 +1,5 @@
 window.HF = window.HF || {};
-HF.createTracePlayer = function createTracePlayer({ onChange, durationForEvent }) {
+HF.createTracePlayer = function createTracePlayer({ onChange, durationForEvent, holdForEvent }) {
   let trace = null;
   let index = -1;
   let progress = 0;
@@ -23,7 +23,8 @@ HF.createTracePlayer = function createTracePlayer({ onChange, durationForEvent }
       if (progress >= 1) {
         progress = 1;
         if (pacing === "guided") { status = index === trace.events.length - 1 ? "done" : "waiting"; stopFrame(); emit(); return; }
-        if (heldMs < holdMs) { emit(); lastTime = now; frameId = requestAnimationFrame(tick); return; }
+        const eventHoldMs = holdForEvent ? holdForEvent(trace.events[index], index) : holdMs;
+        if (heldMs < Math.max(holdMs, eventHoldMs)) { emit(); lastTime = now; frameId = requestAnimationFrame(tick); return; }
         if (index === trace.events.length - 1) { status = "done"; stopFrame(); emit(); return; }
         index += 1;
         progress = 0; heldMs = 0;

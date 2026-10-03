@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.6 — Phase A.3 explanations and readability
+
+- Added geometry-anchored explanatory popups for all ten ADD and four conceptual SPI steps, with close and Pop-ups setting, collision-aware placement, and reading-based Auto holds.
+- Added Vietnamese and English dictionaries, saved language selection, trace text keys, and immediate retranslation without restarting playback.
+- Strengthened active net contrast with screen-constant casing/core strokes, directional dashes, an 8 px pulse head and a soft-cutout Spotlight; expanded camera padding and reserved popup room.
+- Reduced the default panel to scenario, playback, progress, state and collapsed steps; moved playback, view and developer controls into Settings.
+- Added browser-openable popup and i18n tests and updated camera tests.
+
 ## v0.3.5 — Phase A.2 choreography and camera
 
 - Archived the former Abstract view in `legacy/` because it used unverified blocks not present in the spec diagram; the app now opens directly on the original SPI diagram.
