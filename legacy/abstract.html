@@ -1,0 +1,28 @@
+        <div class="page-heading">
+          <div>
+            <p id="page-eyebrow" class="eyebrow">Architecture / overview</p>
+            <h1 id="architecture-name">Architecture</h1>
+            <p id="page-intro" class="intro">A clear view of how data travels through the hardware path.</p>
+          </div>
+          <div id="flow-key" class="flow-key"><span class="flow-key-line" aria-hidden="true"></span> Data flow direction</div>
+        </div>
+
+        <section id="abstract-view" aria-label="Abstract architecture view">
+          <div class="diagram-panel">
+            <div class="panel-header">
+              <div class="panel-heading"><span class="status-dot" aria-hidden="true"></span> Block diagram</div>
+              <p id="diagram-summary" class="panel-summary"></p>
+            </div>
+            <div class="diagram-scroll" aria-label="Hardware block diagram, scroll horizontally if needed">
+              <div id="diagram" class="diagram">
+                <svg id="connections" class="connections" aria-hidden="true"></svg>
+                <ol id="blocks" class="blocks"></ol>
+              </div>
+            </div>
+            <div class="panel-footer">
+              <span>Source <strong>→</strong> Destination</span>
+              <span>Scroll to explore <span aria-hidden="true">↔</span></span>
+            </div>
+          </div>
+          <p id="connection-description" class="sr-only"></p>
+        </section>

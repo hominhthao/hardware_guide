@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.5 — Phase A.2 choreography and camera
+
+- Archived the former Abstract view in `legacy/` because it used unverified blocks not present in the spec diagram; the app now opens directly on the original SPI diagram.
+- Added source → wire → arrival choreography to both diagrams, with directed net draw-on and source name chips.
+- Added a shared viewBox camera with Follow, Overview, manual wheel and drag controls, and pure camera bounds tests.
+- Split the operand-select and operand-transfer story into separate steps, bringing ADD to ten steps; enlarged captions, chips, pills, and timeline text.
+
 ## v0.3.4 — Phase A.1 story mode
 
 - Split the ADD walkthrough into nine paced presentation steps while preserving the dependency levels and clock-edge writes.

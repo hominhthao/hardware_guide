@@ -163,6 +163,8 @@ window.HF = window.HF || {};
     if (edit && !imageSize) return;
     if (player.state.status === "running") player.reset();
     editing = edit;
+    if (edit) renderer.setFollow(false);
+    el("focus-button").disabled = edit;
     el("riscv-flow-panel").hidden = edit;
     el("net-editor-panel").hidden = !edit;
     netUI.footer.hidden = edit;
@@ -181,6 +183,7 @@ window.HF = window.HF || {};
     el("spi-diagram-button").classList.remove("is-selected"); el("spi-diagram-button").setAttribute("aria-pressed", "false");
     el("riscv-diagram-button").classList.add("is-selected"); el("riscv-diagram-button").setAttribute("aria-pressed", "true");
     el("fidelity-badge").textContent = player.state.trace?.badge ?? "DEPENDENCY ORDER - not time; state updates at clock edge";
+    el("spi-fidelity-badge").hidden = true;
     el("net-caption").hidden = true;
     netUI.footer.hidden = false;
     el("spec-overlay").setAttribute("aria-label", "Original processor diagram with active net graph");
@@ -189,6 +192,7 @@ window.HF = window.HF || {};
     el("diagram-overlay-container").classList.toggle("has-image", !!imageSize);
     el("edit-paths-mode").disabled = !imageSize;
     if (imageSize) renderer.renderStatic();
+    renderer.setFollow(presentation === "story" && !editing);
     setEditMode(editing); player.refresh();
   }
   function showSpi() {
@@ -199,13 +203,15 @@ window.HF = window.HF || {};
     el("riscv-flow-panel").hidden = true; el("net-editor-panel").hidden = true;
     el("net-caption").hidden = true;
     netUI.footer.hidden = true;
-    el("fidelity-badge").textContent = "CONCEPTUAL – not cycle-accurate";
+    el("spi-fidelity-badge").hidden = false;
     el("spec-overlay").setAttribute("aria-label", "Original SPI specification diagram with transmit dataflow paths");
     el("missing-image").querySelector("code").textContent = HF.geometry.image;
     el("missing-image").hidden = !!rendererSpi.imageSize;
     el("diagram-overlay-container").classList.toggle("has-image", !!rendererSpi.imageSize);
     el("diagram-overlay-container").classList.remove("is-net-graph", "is-net-debug");
+    rendererSpi.setFollow(false);
     el("edit-paths-mode").disabled = !rendererSpi.imageSize;
+    el("focus-button").disabled = editingPaths;
     document.querySelector(".workspace-sidebar > .flow-panel").hidden = editingPaths;
     el("editor-panel").hidden = !editingPaths;
     setSpecMode(editingPaths); playerSpi.refresh();
@@ -229,6 +235,7 @@ window.HF = window.HF || {};
   el("riscv-speed").addEventListener("change", (event) => player.setSpeed(Number(event.target.value)));
   for (const [id, mode] of [["riscv-story", "story"], ["riscv-full", "full"]]) el(id).addEventListener("click", () => {
     presentation = mode;
+    renderer.setFollow(mode === "story");
     for (const [buttonId, value] of [["riscv-story", "story"], ["riscv-full", "full"]]) {
       el(buttonId).classList.toggle("is-selected", mode === value); el(buttonId).setAttribute("aria-pressed", String(mode === value));
     }

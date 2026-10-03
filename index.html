@@ -13,11 +13,12 @@
     <script src="src/spiTxTrace.js" defer></script>
     <script src="src/riscvAddTrace.js" defer></script>
     <script src="src/player.js" defer></script>
+    <script src="src/camera.js" defer></script>
     <script src="src/renderer.js" defer></script>
     <script src="app.js" defer></script>
     <script src="src/riscvApp.js" defer></script>
   </head>
-  <body>
+  <body class="spec-active">
     <div class="page-shell">
       <header class="site-header">
         <div class="brand">
@@ -28,53 +29,20 @@
           </div>
         </div>
         <div class="topbar-controls">
-          <div class="mode-switch" role="group" aria-label="Visualization mode">
-            <button id="abstract-mode" class="mode-button is-selected" type="button" aria-pressed="true">Abstract</button>
-            <button id="spec-mode" class="mode-button" type="button" aria-pressed="false">Spec Overlay</button>
-          </div>
-          <div id="diagram-switch" class="spec-mode-switch" role="group" aria-label="Diagram" hidden>
+          <div id="diagram-switch" class="spec-mode-switch" role="group" aria-label="Diagram">
             <button id="spi-diagram-button" class="mode-button is-selected" type="button" aria-pressed="true">SPI TX</button>
             <button id="riscv-diagram-button" class="mode-button" type="button" aria-pressed="false">RISC-V single-cycle</button>
           </div>
-          <div id="spec-mode-switch" class="spec-mode-switch" role="group" aria-label="Specification mode" hidden>
+          <div id="spec-mode-switch" class="spec-mode-switch" role="group" aria-label="Specification mode">
             <button id="view-flow-mode" class="mode-button is-selected" type="button" aria-pressed="true">View Flow</button>
             <button id="edit-paths-mode" class="mode-button" type="button" aria-pressed="false">Edit Paths</button>
           </div>
         </div>
-        <span class="version">v0.3.4</span>
+        <span class="version">v0.3.5</span>
       </header>
 
       <main>
-        <div class="page-heading">
-          <div>
-            <p id="page-eyebrow" class="eyebrow">Architecture / overview</p>
-            <h1 id="architecture-name">Architecture</h1>
-            <p id="page-intro" class="intro">A clear view of how data travels through the hardware path.</p>
-          </div>
-          <div id="flow-key" class="flow-key"><span class="flow-key-line" aria-hidden="true"></span> Data flow direction</div>
-        </div>
-
-        <section id="abstract-view" aria-label="Abstract architecture view">
-          <div class="diagram-panel">
-            <div class="panel-header">
-              <div class="panel-heading"><span class="status-dot" aria-hidden="true"></span> Block diagram</div>
-              <p id="diagram-summary" class="panel-summary"></p>
-            </div>
-            <div class="diagram-scroll" aria-label="Hardware block diagram, scroll horizontally if needed">
-              <div id="diagram" class="diagram">
-                <svg id="connections" class="connections" aria-hidden="true"></svg>
-                <ol id="blocks" class="blocks"></ol>
-              </div>
-            </div>
-            <div class="panel-footer">
-              <span>Source <strong>→</strong> Destination</span>
-              <span>Scroll to explore <span aria-hidden="true">↔</span></span>
-            </div>
-          </div>
-          <p id="connection-description" class="sr-only"></p>
-        </section>
-
-        <section id="spec-view" aria-label="SPI specification overlay view" hidden>
+        <section id="spec-view" aria-label="Specification diagram workspace">
           <div class="workspace">
             <div class="spec-panel">
               <div class="spec-stage">
@@ -83,13 +51,14 @@
                     <strong>SPI specification diagram not found</strong>
                     <span>Place the original SPI block diagram at <code>assets/spi_block_diagram.png</code>.</span>
                   </div>
-                  <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div><button id="fit-button" type="button">Fit</button><button id="focus-button" type="button">Focus flow</button></div></div>
-                  <span id="fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
+                  <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div><button id="fit-button" type="button">Overview</button><button id="focus-button" type="button" aria-pressed="false">Follow</button></div></div>
+                  <span id="spi-fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
                   <svg id="spec-overlay" class="spec-overlay" role="img" aria-label="Original SPI specification diagram with transmit dataflow paths" hidden></svg>
                 </div>
               </div>
               <div id="net-story-footer" class="net-story-footer" hidden>
-                <div class="net-story-caption"><strong id="net-step-meta">Step 0 / 9</strong><span id="net-caption" class="net-caption" hidden></span><span id="net-parallel-tag" hidden></span></div>
+                <span id="fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
+                <div class="net-story-caption"><strong id="net-step-meta">Step 0 / 10</strong><span id="net-caption" class="net-caption" hidden></span><span id="net-parallel-tag" hidden></span></div>
                 <p id="net-detail" class="net-detail"></p>
                 <div id="net-control-strip" class="net-control-strip"></div>
                 <div id="net-unused-strip" class="net-unused-strip" hidden><button id="net-unused-toggle" type="button" aria-expanded="false"></button><span id="net-unused-list" hidden></span></div>

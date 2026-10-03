@@ -11,8 +11,11 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
   const edgeById = new Map((flow.edges ?? []).map((edge) => [edge.id, edge]));
   const nodeById = new Map(flow.nodes.map((node) => [node.id, node]));
   let imageSize = null;
-  let zoomMode = "focus";
+  let zoomMode = "fit";
   let zoomFrame = null;
+  let followEnabled = false;
+  let followedIndex = -2;
+  let dragging = null;
   let markerGroup, markerTrail, markerDot, markerLabel;
   let editState = { editing: false, selectedPathId: null, pointsDraft: null, selectedPointIndex: null };
   let lastRender = { event: null, progress: 0, meta: { status: "ready", index: -1 }, options: {} };
@@ -32,6 +35,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
   };
   function viewBoxValues(mode) {
     if (!imageSize) return [0, 0, geometry.viewBox.width, geometry.viewBox.height];
+    if (mode === "fit") return [0, 0, imageSize.width, imageSize.height];
     const box = geometry.viewport[mode];
     return [box.x, box.y, imageSize.width - box.x - box.right, imageSize.height - box.y - box.bottom];
   }
@@ -100,16 +104,36 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     markerGroup = makeSvg("g", "marker-group"); markerGroup.setAttribute("visibility", "hidden");
     markerTrail = makeSvg("path", "marker-trail"); markerDot = makeSvg("circle", "data-marker"); markerLabel = makeSvg("text", "marker-label");
     markerGroup.append(markerTrail, markerDot, markerLabel); svg.append(markerGroup);
+    svg.append(makeSvg("g", "node-chip-layer"));
     updateMarkerSize();
     render(lastRender.event, lastRender.progress, lastRender.meta, lastRender.options);
   }
   function durationForEvent(event, index) {
-    if (geometry.presentation === "net-graph") return 1300;
-    const edge = edgeById.get(event?.activeEdges?.[0]);
-    const path = edge && pathElements.get(edge.pathId);
-    if (!path) return 1;
-    const travel = Math.max(900, Math.min(1600, path.getTotalLength() / 130 * 1000));
-    return travel + (index > 0 ? 420 : 0);
+    return 1700;
+  }
+  const phaseFor = (progress) => progress < 400 / 1700 ? "source" : progress < 1300 / 1700 ? "wire" : "arrival";
+  const wireFraction = (progress) => Math.max(0, Math.min(1, (progress - 400 / 1700) / (900 / 1700)));
+  function renderNodeChips(ids) {
+    const layer = svg.querySelector(".node-chip-layer");
+    if (!layer || !imageSize) return;
+    layer.replaceChildren();
+    const matrix = svg.getScreenCTM(); if (!matrix) return;
+    const xScale = Math.hypot(matrix.a, matrix.b), yScale = Math.hypot(matrix.c, matrix.d);
+    const occupied = [];
+    ids.forEach((id) => {
+      const node = nodeById.get(id), box = nodeGeometry(node?.geometryNodeId)?.box;
+      if (!node || !box) return;
+      const screen = scaleBox(box);
+      const width = Math.max(86, node.label.length * 8 + 20) / xScale, height = 25 / yScale;
+      let x = screen.x + screen.width / 2 - width / 2, y = screen.y - height - 7 / yScale;
+      while (occupied.some((item) => x < item.x + item.width && x + width > item.x && y < item.y + item.height && y + height > item.y)) y += height + 3 / yScale;
+      occupied.push({ x, y, width, height });
+      const chip = makeSvg("g", "node-name-chip"), rect = makeSvg("rect"), label = makeSvg("text");
+      for (const [key, value] of Object.entries({ x, y, width, height, rx: 5 })) rect.setAttribute(key, value);
+      label.setAttribute("x", x + 9 / xScale); label.setAttribute("y", y + 17 / yScale);
+      label.setAttribute("font-size", 14 / yScale); label.textContent = node.label;
+      chip.append(rect, label); layer.append(chip);
+    });
   }
   function markerAt(point, previous, value, nearEnd) {
     markerDot.setAttribute("cx", point.x); markerDot.setAttribute("cy", point.y);
@@ -123,52 +147,46 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
   function render(event, progress, meta, options = {}) {
     if (geometry.presentation === "net-graph") { renderNets(event, progress, meta, options); return; }
     lastRender = { event, progress, meta, options };
+    followEvent(event, meta);
     const activeEdgeId = event?.activeEdges?.[0];
     const activeIndex = activeEdgeId ? flow.order.indexOf(activeEdgeId) : -1;
     const terminal = !!event && !activeEdgeId && meta.index === meta.trace?.events.length - 1;
     if (imageSize && !editState.editing) {
+      const phase = phaseFor(progress), travel = wireFraction(progress);
       container.classList.toggle("is-dimmed", !!event && options.dim !== false);
       flow.order.forEach((edgeId, index) => {
-        const edge = edgeById.get(edgeId); const path = pathElements.get(edge?.pathId);
+        const edge = edgeById.get(edgeId), path = pathElements.get(edge?.pathId);
         if (!path) return;
-        path.classList.toggle("is-active", index === activeIndex);
-        path.classList.toggle("is-completed", terminal || index < activeIndex);
-        path.setAttribute("marker-end", index === activeIndex ? "url(#spec-arrow)" : "");
+        const current = index === activeIndex && phase !== "source";
+        const recent = terminal ? index === flow.order.length - 1 : index === activeIndex - 1;
+        path.classList.toggle("is-active", current);
+        path.classList.toggle("is-completed", recent);
+        path.classList.toggle("is-old", !!event && index < activeIndex - 1);
+        path.style.opacity = !event || current || recent ? "" : "0";
+        if (current) {
+          const length = path.getTotalLength();
+          path.setAttribute("stroke-dasharray", `${length} ${length}`);
+          path.setAttribute("stroke-dashoffset", String((1 - travel) * length));
+        } else { path.removeAttribute("stroke-dasharray"); path.removeAttribute("stroke-dashoffset"); }
+        path.removeAttribute("marker-end");
       });
-      const arrivalNodeId = progress >= .98 ? edgeById.get(activeEdgeId)?.to : null;
-      const currentNodeId = terminal ? event.activeNodes[0] : arrivalNodeId ?? event?.activeNodes?.[0];
-      const currentNodeIndex = flow.nodes.findIndex((node) => node.id === currentNodeId);
-      flow.nodes.forEach((node, index) => {
-        const group = blockElements.get(node.id);
-        if (!group) return;
-        group.classList.toggle("is-current", !!event && node.id === currentNodeId);
-        group.classList.toggle("is-passed", !!event && index < currentNodeIndex);
+      const edge = edgeById.get(activeEdgeId);
+      const sourceId = edge?.from ?? event?.activeNodes?.[0];
+      const sinkId = edge?.to ?? event?.activeNodes?.[0];
+      const lit = phase === "arrival" ? sinkId : sourceId;
+      flow.nodes.forEach((node) => {
+        const group = blockElements.get(node.id); if (!group) return;
+        group.classList.toggle("is-current", !!event && node.id === lit);
+        group.classList.toggle("is-passed", false);
       });
-      if (event) {
-        const edge = edgeById.get(activeEdgeId) ?? edgeById.get(flow.order.at(-1));
-        const path = pathElements.get(edge?.pathId);
-        if (path) {
-          let point, previous;
-          if (terminal) {
-            point = path.getPointAtLength(path.getTotalLength()); previous = path.getPointAtLength(path.getTotalLength());
-          } else {
-            const duration = durationForEvent(event, activeIndex);
-            const bridgePortion = activeIndex > 0 && !meta.manualSeek ? 420 / duration : 0;
-            if (bridgePortion && progress < bridgePortion) {
-              const beforeEdge = edgeById.get(flow.order[activeIndex - 1]);
-              const beforePath = pathElements.get(beforeEdge.pathId);
-              const from = beforePath.getPointAtLength(beforePath.getTotalLength()); const to = path.getPointAtLength(0);
-              const fraction = progress / bridgePortion;
-              const along = (t) => ({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
-              point = along(fraction); previous = along(Math.max(0, fraction - .14));
-            } else {
-              const fraction = bridgePortion ? (progress - bridgePortion) / (1 - bridgePortion) : progress;
-              const length = path.getTotalLength();
-              point = path.getPointAtLength(length * fraction); previous = path.getPointAtLength(length * Math.max(0, fraction - .18));
-            }
-          }
-          markerAt(point, previous, event.values?.hexValue, terminal || activeIndex === flow.order.length - 1);
-        }
+      renderNodeChips(event && phase === "source" ? [sourceId] : []);
+      const path = pathElements.get(edge?.pathId ?? edgeById.get(flow.order.at(-1))?.pathId);
+      if (event && path && (phase !== "source" || terminal)) {
+        const length = path.getTotalLength();
+        const fraction = terminal ? 1 : travel;
+        const point = path.getPointAtLength(length * fraction);
+        const previous = path.getPointAtLength(length * Math.max(0, fraction - .1));
+        markerAt(point, previous, event.values?.hexValue, terminal || activeIndex === flow.order.length - 1);
       } else if (markerGroup) markerGroup.setAttribute("visibility", "hidden");
     }
     const currentNodeId = terminal ? event?.activeNodes?.[0] : progress >= .98 ? edgeById.get(activeEdgeId)?.to : event?.activeNodes?.[0];
@@ -213,21 +231,100 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       button.append(symbol, name); button.addEventListener("click", () => onSeek(index)); item.append(button); list.append(item);
     });
   }
-  function setZoom(mode) {
-    if (!imageSize || zoomMode === mode) return;
+  function animateViewBox(target, instant = false) {
+    if (!imageSize) return;
     if (zoomFrame !== null) cancelAnimationFrame(zoomFrame);
-    const from = svg.getAttribute("viewBox").split(/\s+/).map(Number);
-    const to = viewBoxValues(mode); zoomMode = mode; const start = performance.now();
+    zoomFrame = null;
+    const from = (svg.getAttribute("viewBox") || viewBoxValues("fit").join(" ")).split(/\s+/).map(Number);
+    const to = [target.x, target.y, target.width, target.height];
+    if (instant || from.every((value, index) => Math.abs(value - to[index]) < .01)) {
+      svg.setAttribute("viewBox", to.join(" ")); updateMarkerSize(); return;
+    }
+    const start = performance.now();
     function frame(now) {
-      const t = Math.min(1, (now - start) / 260); const eased = t * t * (3 - 2 * t);
+      const t = Math.min(1, Math.max(0, (now - start) / 500));
+      const eased = t * t * (3 - 2 * t);
       svg.setAttribute("viewBox", from.map((value, i) => value + (to[i] - value) * eased).join(" "));
       updateMarkerSize();
+      if (geometry.presentation === "net-graph") renderNets(lastRender.event, lastRender.progress, lastRender.meta, lastRender.options);
       if (t < 1) zoomFrame = requestAnimationFrame(frame); else zoomFrame = null;
     }
     zoomFrame = requestAnimationFrame(frame);
-    document.getElementById("fit-button").classList.toggle("is-selected", mode === "fit");
-    document.getElementById("focus-button").classList.toggle("is-selected", mode === "focus");
   }
+  function focusView(event) {
+    if (!imageSize || !event) return null;
+    const focusNetIds = event.focusNets ?? (event.activeEdges ?? []).map((id) => edgeById.get(id)?.pathId).filter(Boolean);
+    const focusNodeIds = event.focusNodes ?? event.activeNodes ?? [];
+    const nodeBoxes = focusNodeIds.map((id) => nodeGeometry(nodeById.get(id)?.geometryNodeId)?.box).filter(Boolean);
+    const boxes = nodeBoxes.map(scaleBox);
+    const pointNearFocus = (point) => nodeBoxes.some((box) => point.x >= box.x - 35 && point.x <= box.x + box.width + 35 && point.y >= box.y - 35 && point.y <= box.y + box.height + 35);
+    focusNetIds.forEach((id) => {
+      const path = geometry.paths?.find((item) => item.id === id);
+      const net = geometry.nets?.find((item) => item.id === id);
+      const segments = path ? [{ points: path.points, from: "source" }] : net?.segments ?? [];
+      segments.filter((segment) => !event.focusNodes || segment.to?.startsWith("j") || pointNearFocus(segment.points.at(-1))).forEach((segment) => {
+        segment.points.forEach((point) => { const scaled = scalePoint(point); boxes.push({ x: scaled.x, y: scaled.y, width: 0, height: 0 }); });
+      });
+    });
+    const area = svg.getBoundingClientRect();
+    return HF.computeCameraViewBox({ imageWidth: imageSize.width, imageHeight: imageSize.height,
+      viewportWidth: area.width || 1, viewportHeight: area.height || 1, focusBoxes: boxes });
+  }
+  function followEvent(event, meta) {
+    if (!followEnabled || editState.editing || meta.index === followedIndex) return;
+    followedIndex = meta.index;
+    const view = focusView(event);
+    if (view) animateViewBox(view);
+  }
+  function setFollow(value) {
+    followEnabled = !!value && !editState.editing;
+    if (!followEnabled && zoomFrame !== null) { cancelAnimationFrame(zoomFrame); zoomFrame = null; }
+    followedIndex = -2;
+    const button = document.getElementById("focus-button");
+    button.classList.toggle("is-selected", followEnabled);
+    button.setAttribute("aria-pressed", String(followEnabled));
+    if (followEnabled) followEvent(lastRender.event, lastRender.meta);
+  }
+  function setZoom(mode) {
+    if (!imageSize) return;
+    if (mode === "fit") { setFollow(false); zoomMode = "fit"; animateViewBox({ x: 0, y: 0, width: imageSize.width, height: imageSize.height }); }
+    else if (mode === "focus") setFollow(true);
+  }
+  function currentViewBox() { return svg.getAttribute("viewBox").split(/\s+/).map(Number); }
+  function manualView(next) {
+    if (zoomFrame !== null) cancelAnimationFrame(zoomFrame);
+    zoomFrame = null; setFollow(false);
+    const width = Math.max(imageSize.width * .3, Math.min(imageSize.width, next[2]));
+    const height = Math.max(imageSize.height * .3, Math.min(imageSize.height, next[3]));
+    const x = Math.max(0, Math.min(imageSize.width - width, next[0]));
+    const y = Math.max(0, Math.min(imageSize.height - height, next[1]));
+    svg.setAttribute("viewBox", [x, y, width, height].join(" "));
+    updateMarkerSize();
+    if (geometry.presentation === "net-graph") renderNets(lastRender.event, lastRender.progress, lastRender.meta, lastRender.options);
+  }
+  svg.addEventListener("wheel", (event) => {
+    if (!imageSize || editState.editing || container.classList.contains("is-net-graph") !== (geometry.presentation === "net-graph")) return;
+    event.preventDefault();
+    const [x, y, width, height] = currentViewBox();
+    const factor = event.deltaY < 0 ? .9 : 1.1;
+    const rect = svg.getBoundingClientRect();
+    const mx = (event.clientX - rect.left) / rect.width, my = (event.clientY - rect.top) / rect.height;
+    const nextW = width * factor, nextH = height * factor;
+    manualView([x + (width - nextW) * mx, y + (height - nextH) * my, nextW, nextH]);
+  }, { passive: false });
+  svg.addEventListener("pointerdown", (event) => {
+    if (!imageSize || editState.editing || event.button !== 0 || container.classList.contains("is-net-graph") !== (geometry.presentation === "net-graph")) return;
+    dragging = { x: event.clientX, y: event.clientY, view: currentViewBox() };
+    svg.setPointerCapture(event.pointerId);
+  });
+  svg.addEventListener("pointermove", (event) => {
+    if (!dragging || !imageSize) return;
+    const area = svg.getBoundingClientRect();
+    const [x, y, width, height] = dragging.view;
+    manualView([x - (event.clientX - dragging.x) * width / area.width, y - (event.clientY - dragging.y) * height / area.height, width, height]);
+  });
+  svg.addEventListener("pointerup", () => { dragging = null; });
+  svg.addEventListener("pointercancel", () => { dragging = null; });
   function clientToReference(event) {
     if (!imageSize) return null;
     const point = svg.createSVGPoint(); point.x = event.clientX; point.y = event.clientY;
@@ -302,6 +399,8 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       });
     }
     const pillLayer = makeSvg("g", "net-pill-layer"); svg.append(pillLayer);
+    svg.append(makeSvg("g", "mux-selection-layer"));
+    svg.append(makeSvg("g", "node-chip-layer"));
     renderNets(lastRender.event, lastRender.progress, lastRender.meta, lastRender.options);
   }
   function renderNetTimeline(onSeek, trace) {
@@ -316,12 +415,18 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
   }
   function renderNets(event, progress, meta, options = {}) {
     lastRender = { event, progress, meta, options };
+    followEvent(event, meta);
     if (!netUI) return;
     const trace = meta.trace;
     const story = options.presentation !== "full" && Array.isArray(event?.focusNets);
     const focusNets = story ? new Set(event.focusNets) : new Set(event?.activeNets?.map((net) => net.id) ?? []);
     const focusNodes = story ? new Set(event.focusNodes ?? []) : new Set(event?.activeNodes ?? []);
     const active = new Map((event?.activeNets ?? []).map((item) => [item.id, item]));
+    const phase = phaseFor(progress), travel = wireFraction(progress);
+    const sourceNodes = new Set([...focusNets].map((id) => netById.get(id)?.from).filter(Boolean));
+    if (!sourceNodes.size && !event?.stateWrites?.length) focusNodes.forEach((id) => sourceNodes.add(id));
+    const arrivalNodes = new Set([...focusNodes].filter((id) => !sourceNodes.has(id)));
+    if (event?.stateWrites?.length) event.stateWrites.forEach((write) => arrivalNodes.add(write.node));
     const unused = new Set(event?.unused ?? []);
     const selected = event?.muxSelect ?? {};
     const selectedInputs = new Map(), unselectedInputs = new Map(), selectors = new Set();
@@ -341,6 +446,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       container.classList.toggle("is-dimmed", !!event && options.dim !== false);
       container.classList.toggle("is-story", story);
       const pillLayer = svg.querySelector(".net-pill-layer"); pillLayer?.replaceChildren();
+      const selectionLayer = svg.querySelector(".mux-selection-layer"); selectionLayer?.replaceChildren();
       const matrix = svg.getScreenCTM();
       const xScale = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
       const yScale = matrix ? Math.hypot(matrix.c, matrix.d) : 1;
@@ -361,8 +467,10 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         netGroup?.classList.toggle("is-secondary", isSecondary);
         netGroup?.classList.toggle("is-hidden-control", isHiddenControl);
         netGroup?.classList.toggle("is-hidden-unused", isHiddenUnused);
-        netGroup?.classList.toggle("is-recent", (previous.has(netGeometry.id) || (options.keepFullTrail && older.has(netGeometry.id))) && !isFocus);
+        netGroup?.classList.toggle("is-recent", !!(previous.has(netGeometry.id) || (options.keepFullTrail && older.has(netGeometry.id))) && !isFocus);
         netGroup?.classList.toggle("is-old", older.has(netGeometry.id) && !previous.has(netGeometry.id) && !isFocus && !options.keepFullTrail);
+        if (netGroup) netGroup.style.opacity = story && !debugNets ?
+          (isFocus ? (phase === "source" ? "0" : "1") : previous.has(netGeometry.id) || (options.keepFullTrail && older.has(netGeometry.id)) ? ".5" : options.revealUnused && unused.has(netGeometry.id) ? ".25" : "0") : "";
         const title = netGroup?.querySelector("title") ?? makeSvg("title");
         title.textContent = signal ? `${net?.label ?? netGeometry.id} = ${signal.value}` : (net?.label ?? netGeometry.id);
         if (netGroup && !title.parentNode) netGroup.append(title);
@@ -385,7 +493,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
           const isUnselected = unselectedInputs.get(netGeometry.id)?.has(segment.to);
           const isSelected = selectedInputs.get(netGeometry.id)?.has(segment.to);
           const end = segment.points.at(-1);
-          const branchFocused = !story || segment.from !== "source" ? (!story || pointInFocus(end) || segment.to.startsWith("j")) : true;
+          const branchFocused = !story || pointInFocus(end) || segment.to.startsWith("j");
           const pulseThis = (isFocus || (!story && isSelect)) && branchFocused && !isUnselected;
           group.classList.toggle("is-active-net", pulseThis);
           group.classList.toggle("is-control-net", net?.role === "control");
@@ -395,22 +503,23 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
           group.classList.toggle("is-select-wire", isSelect);
           group.classList.toggle("is-secondary-segment", isFocus && !branchFocused);
           const own = lengths[index];
-          const fraction = pulseThis ? Math.max(0, Math.min(1, (progress * total - own.start) / Math.max(1, own.length))) : 0;
-          fill.setAttribute("stroke-dasharray", `${fraction * own.length} ${own.length + 1}`);
+          const fraction = pulseThis ? Math.max(0, Math.min(1, (travel * total - own.start) / Math.max(1, own.length))) : 0;
+          fill.style.strokeDasharray = `${own.length} ${own.length}`;
+          fill.style.strokeDashoffset = String((1 - fraction) * own.length);
           fill.setAttribute("visibility", fraction > 0 ? "visible" : "hidden");
-          if (fraction > 0 && fraction < 1) {
+          if (phase === "wire" && fraction > 0 && fraction < 1) {
             const point = path.getPointAtLength(own.length * fraction);
             pulse.setAttribute("cx", point.x); pulse.setAttribute("cy", point.y);
             pulse.setAttribute("r", String(6 / Math.max(.01, xScale)));
             pulse.setAttribute("visibility", "visible");
           } else pulse.setAttribute("visibility", "hidden");
         });
-        if (!signal || !items.length || !pillLayer || isHiddenControl || isHiddenUnused || (story && (!isFocus || pillCount >= 3))) return;
+        if (phase !== "arrival" || !signal || !items.length || !pillLayer || isHiddenControl || isHiddenUnused || (story && (!isFocus || pillCount >= 3))) return;
         const candidate = items.reduce((best, item) => item.path.getTotalLength() > best.path.getTotalLength() ? item : best, items[0]);
         const midpoint = candidate.path.getPointAtLength(candidate.path.getTotalLength() * .5);
         const screen = midpoint.matrixTransform(matrix);
         const labelText = `${net?.label ?? netGeometry.id} = ${signal.value}`;
-        const widthPx = Math.max(94, labelText.length * 7 + 18), heightPx = 23;
+        const widthPx = Math.max(94, labelText.length * 8 + 20), heightPx = 27;
         const offsets = [[14, -37], [14, 17], [-widthPx - 14, -37], [-widthPx - 14, 17], [18, -66], [18, 47]];
         const ownSamples = Array.from({ length: 9 }, (_, i) => candidate.path.getPointAtLength(candidate.path.getTotalLength() * i / 8).matrixTransform(matrix));
         let target = null;
@@ -429,19 +538,31 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
         const rect = makeSvg("rect");
         for (const [key, value] of Object.entries({ x: local.x, y: local.y, width: widthPx / xScale, height: heightPx / yScale, rx: 5 })) rect.setAttribute(key, value);
         const label = makeSvg("text"); label.setAttribute("x", local.x + 8 / xScale); label.setAttribute("y", local.y + 16 / yScale);
-        label.setAttribute("font-size", 12 / yScale); label.textContent = labelText;
+        label.setAttribute("font-size", 14 / yScale); label.textContent = labelText;
         pill.append(rect, label); pillLayer.append(pill);
         if (!story && unused.has(netGeometry.id)) {
           const hint = makeSvg("text", "net-unused-hint"); hint.setAttribute("x", local.x); hint.setAttribute("y", local.y + 37 / yScale);
           hint.setAttribute("font-size", 10 / yScale); hint.textContent = "computed, not used"; pillLayer.append(hint);
         }
       });
+      if (selectionLayer && phase !== "source") {
+        selectedInputs.forEach((muxIds, netId) => {
+          (netSegments.get(netId) ?? []).forEach(({ segment, path }) => {
+            if (!muxIds.has(segment.to) || (story && !focusNodes.has(segment.to))) return;
+            const point = path.getPointAtLength(path.getTotalLength());
+            const marker = makeSvg("circle", "mux-selected-port");
+            marker.setAttribute("cx", point.x); marker.setAttribute("cy", point.y);
+            marker.setAttribute("r", 8 / Math.max(.01, xScale)); selectionLayer.append(marker);
+          });
+        });
+      }
       flow.nodes.forEach((node) => {
         const group = blockElements.get(node.id); if (!group) return;
-        const current = story ? focusNodes.has(node.id) : !!event && event.activeNodes.includes(node.id);
+        const current = phase === "arrival" ? arrivalNodes.has(node.id) : sourceNodes.has(node.id);
         group.classList.toggle("is-current", !!event && current);
         group.classList.toggle("is-passed", !story && !!event && !current && meta.index > 0 && trace?.events.slice(0, meta.index).some((earlier) => (earlier.focusNodes ?? earlier.activeNodes).includes(node.id)));
       });
+      renderNodeChips(event && phase === "source" ? [...sourceNodes] : []);
     }
     netUI.badge.textContent = trace?.badge ?? flow.badge ?? "";
     const ref = flow.specRef;
@@ -509,7 +630,15 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
   }
 
   return {
-    render, renderStatic, renderTimeline, setZoom, updateMarkerSize, durationForEvent, clientToReference,
+    render, renderStatic, renderTimeline, setZoom, setFollow, updateMarkerSize, durationForEvent, clientToReference,
+    cameraTarget: focusView,
+    snapCamera(event) {
+      const target = focusView(event);
+      if (target) {
+        animateViewBox(target, true);
+        if (geometry.presentation === "net-graph") renderNets(lastRender.event, lastRender.progress, lastRender.meta, lastRender.options);
+      }
+    },
     setDebug(value) { debugNets = !!value; container.classList.toggle("is-net-debug", debugNets); if (geometry.presentation === "net-graph") renderNets(lastRender.event, lastRender.progress, lastRender.meta, lastRender.options); },
     setImageSize(size, renderNow = true) { imageSize = size; if (size && renderNow) renderStatic(); else if (!size && renderNow) svg.setAttribute("hidden", ""); },
     get imageSize() { return imageSize; }

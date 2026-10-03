@@ -23,9 +23,6 @@ HF.createTracePlayer = function createTracePlayer({ onChange, durationForEvent }
       if (progress >= 1) {
         progress = 1;
         if (pacing === "guided") { status = index === trace.events.length - 1 ? "done" : "waiting"; stopFrame(); emit(); return; }
-        if (holdMs === 0 && index === trace.events.length - 2) {
-          index = trace.events.length - 1; status = "done"; stopFrame(); emit(); return;
-        }
         if (heldMs < holdMs) { emit(); lastTime = now; frameId = requestAnimationFrame(tick); return; }
         if (index === trace.events.length - 1) { status = "done"; stopFrame(); emit(); return; }
         index += 1;

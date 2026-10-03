@@ -5,10 +5,10 @@ const nodeIds = new Set(design.nodes.map((node) => node.id));
 const netIds = new Set(design.nets.map((net) => net.id));
 const geometryNodeIds = new Set(geometry.nodes.map((node) => node.id));
 const geometryNetIds = new Set(geometry.nets.map((net) => net.id));
-const levels = [1, 2, 3, 3, 4, 5, 6, 6, 7];
+const levels = [1, 2, 3, 3, 4, 4, 5, 6, 6, 7];
 const focus = [
   ["pc"], ["instr", "rs1_addr", "rs2_addr"], ["rs1_data", "rs2_data"], [],
-  ["opa_sel", "opb_sel", "operand_a"], ["alu_op", "alu_data"],
+  ["opa_sel", "opb_sel"], ["operand_a", "operand_b"], ["alu_op", "alu_data"],
   ["wb_sel", "alu_data", "wb_data"], ["pc_sel", "pc_four", "pc_next"], []
 ];
 function report(section, label, passed) {
@@ -22,9 +22,9 @@ for (const [x1, x2, result] of [[5, 7, 12], [0, 0, 0], [0xFFFFFFFF, 1, 0], [0x7F
   let trace;
   try { trace = HF.generateRiscvTrace(design, { x1, x2, pc: 0 }); }
   catch (error) { report(section, `generator: ${error.message}`, false); continue; }
-  report(section, "nine story steps and true dependency levels", trace.events.length === 9 &&
+  report(section, "ten story steps and true dependency levels", trace.events.length === 10 &&
     trace.events.every((event, index) => event.t === index && event.dependencyLevel === levels[index] &&
-      event.phase === (index === 8 ? "clock-edge" : "evaluate")));
+      event.phase === (index === 9 ? "clock-edge" : "evaluate")));
   report(section, "focus sets follow the story and contain at most three nets", trace.events.every((event, index) =>
     JSON.stringify(event.focusNets) === JSON.stringify(focus[index]) && event.focusNets.length <= 3 &&
     event.focusNets.every((id) => event.activeNets.some((net) => net.id === id))));
@@ -36,12 +36,16 @@ for (const [x1, x2, result] of [[5, 7, 12], [0, 0, 0], [0xFFFFFFFF, 1, 0], [0x7F
     design.nets.every((net) => geometryNetIds.has(net.id) && nodeIds.has(net.from) && net.to.every((id) => nodeIds.has(id))) &&
     design.muxes.every((mux) => nodeIds.has(mux.id) && netIds.has(mux.selectNet) && netIds.has(mux.outputNet) && mux.inputs.every((id) => netIds.has(id))));
   report(section, "control wires focus only where used", trace.events.every((event, index) =>
-    (index === 4 || index === 5 || index === 6 || index === 7) ||
+    (index === 4 || index === 6 || index === 7 || index === 8) ||
     event.focusNets.every((id) => design.nets.find((net) => net.id === id).role !== "control")));
   report(section, "control decode has no focused wire", trace.events[3].focusNets.length === 0 &&
     trace.events[3].focusNodes.length === 1 && trace.events[3].activeNets.filter((net) => net.role === "control").length === 7);
   report(section, "same-level steps are marked by dependencyLevel", trace.events[2].dependencyLevel === trace.events[3].dependencyLevel &&
-    trace.events[6].dependencyLevel === trace.events[7].dependencyLevel);
+    trace.events[4].dependencyLevel === trace.events[5].dependencyLevel &&
+    trace.events[7].dependencyLevel === trace.events[8].dependencyLevel);
+  report(section, "select and operand steps are separate", JSON.stringify(trace.events[4].focusNets) === JSON.stringify(["opa_sel", "opb_sel"]) &&
+    JSON.stringify(trace.events[5].focusNets) === JSON.stringify(["operand_a", "operand_b"]) &&
+    trace.events[5].muxSelect.opa_mux === "rs1_data" && trace.events[5].muxSelect.opb_mux === "rs2_data");
   report(section, "unused results are listed for step 3", ["imm", "br_less", "br_equal"].every((id) => trace.events[2].unused.includes(id)));
   report(section, "state writes occur only on the clock edge", trace.events.slice(0, -1).every((event) => event.stateWrites.length === 0) &&
     trace.events.at(-1).stateWrites.length === 2);
