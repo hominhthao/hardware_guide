@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10161d">
+    <title>HardwareFlow — Architecture Visualizer</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="data/geometry.js" defer></script>
+    <script src="data/flow.js" defer></script>
+    <script src="src/spiTxTrace.js" defer></script>
+    <script src="src/player.js" defer></script>
+    <script src="src/renderer.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">HF</span>
+          <div>
+            <p class="brand-name">HardwareFlow</p>
+            <p id="brand-description" class="brand-description">Hardware architecture visualizer</p>
+          </div>
+        </div>
+        <div class="topbar-controls">
+          <div class="mode-switch" role="group" aria-label="Visualization mode">
+            <button id="abstract-mode" class="mode-button is-selected" type="button" aria-pressed="true">Abstract</button>
+            <button id="spec-mode" class="mode-button" type="button" aria-pressed="false">Spec Overlay</button>
+          </div>
+          <div id="spec-mode-switch" class="spec-mode-switch" role="group" aria-label="Specification mode" hidden>
+            <button id="view-flow-mode" class="mode-button is-selected" type="button" aria-pressed="true">View Flow</button>
+            <button id="edit-paths-mode" class="mode-button" type="button" aria-pressed="false">Edit Paths</button>
+          </div>
+        </div>
+        <span class="version">v0.3.2</span>
+      </header>
+
+      <main>
+        <div class="page-heading">
+          <div>
+            <p id="page-eyebrow" class="eyebrow">Architecture / overview</p>
+            <h1 id="architecture-name">Architecture</h1>
+            <p id="page-intro" class="intro">A clear view of how data travels through the hardware path.</p>
+          </div>
+          <div id="flow-key" class="flow-key"><span class="flow-key-line" aria-hidden="true"></span> Data flow direction</div>
+        </div>
+
+        <section id="abstract-view" aria-label="Abstract architecture view">
+          <div class="diagram-panel">
+            <div class="panel-header">
+              <div class="panel-heading"><span class="status-dot" aria-hidden="true"></span> Block diagram</div>
+              <p id="diagram-summary" class="panel-summary"></p>
+            </div>
+            <div class="diagram-scroll" aria-label="Hardware block diagram, scroll horizontally if needed">
+              <div id="diagram" class="diagram">
+                <svg id="connections" class="connections" aria-hidden="true"></svg>
+                <ol id="blocks" class="blocks"></ol>
+              </div>
+            </div>
+            <div class="panel-footer">
+              <span>Source <strong>→</strong> Destination</span>
+              <span>Scroll to explore <span aria-hidden="true">↔</span></span>
+            </div>
+          </div>
+          <p id="connection-description" class="sr-only"></p>
+        </section>
+
+        <section id="spec-view" aria-label="SPI specification overlay view" hidden>
+          <div class="workspace">
+            <div class="spec-panel">
+              <div class="spec-stage">
+                <div id="diagram-overlay-container" class="diagram-overlay-container">
+                  <div id="missing-image" class="missing-image" role="status" hidden>
+                    <strong>SPI specification diagram not found</strong>
+                    <span>Place the original SPI block diagram at <code>assets/spi_block_diagram.png</code>.</span>
+                  </div>
+                  <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div><button id="fit-button" type="button">Fit</button><button id="focus-button" type="button">Focus flow</button></div></div>
+                  <span class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
+                  <svg id="spec-overlay" class="spec-overlay" role="img" aria-label="Original SPI specification diagram with transmit dataflow paths" hidden></svg>
+                </div>
+              </div>
+            </div>
+
+            <aside class="workspace-sidebar" aria-label="Dataflow controls">
+              <div class="flow-panel">
+                <div class="workspace-side-heading">
+                  <p class="eyebrow">Transmit / conceptual dataflow</p>
+                  <h2>SPI TX Dataflow</h2>
+                </div>
+                <div class="workspace-side-content">
+                  <label class="input-label" for="tx-input">TX Data</label>
+                  <input id="tx-input" type="text" value="0xA5" autocomplete="off" spellcheck="false" aria-describedby="input-help tx-error">
+                  <p id="input-help" class="input-help">8-bit hex or 8-bit binary</p>
+                  <p id="tx-error" class="input-error" role="alert" hidden></p>
+
+                  <div class="playback-options"><label>Speed <select id="speed-select"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label class="dim-toggle"><input id="dim-toggle" type="checkbox" checked> Dim background</label></div>
+                  <button id="run-button" class="run-button" type="button">Run →</button>
+                  <div class="step-controls" aria-label="Manual controls">
+                    <button id="step-button" type="button">Step</button>
+                    <button id="previous-button" type="button">Previous</button>
+                    <button id="reset-button" type="button">Reset</button>
+                  </div>
+
+                  <ol id="stage-timeline" class="stage-timeline" aria-label="TX stages"></ol>
+                  <div class="flow-status" aria-live="polite">
+                    <div class="status-row"><span class="info-label">Status</span><strong id="status-value">Ready</strong></div>
+                    <div class="status-row"><span class="info-label">Step</span><strong id="step-value">0 / 3</strong></div>
+                    <div class="status-row"><span class="info-label">Current Stage</span><strong id="path-value">—</strong></div>
+                    <div class="status-row"><span class="info-label">Data</span><strong id="data-value">0xA5</strong></div>
+                    <div class="status-row"><span class="info-label">Binary</span><strong id="binary-value">10100101</strong></div>
+                    <div class="status-row"><span class="info-label">Spec ref</span><strong id="spec-ref-value" class="unverified">Unverified — no specRef</strong></div>
+                    <div class="status-row description-row"><span class="info-label">Description</span><span id="description-value">Ready to follow the SPI TX dataflow.</span></div>
+                    <div id="destination-row" class="status-row" hidden><span class="info-label">Destination</span><strong id="destination-value">MOSI</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="editor-panel" class="editor-panel" hidden>
+                <div class="editor-heading">
+                  <div>
+                    <p class="eyebrow">Calibration / signal routes</p>
+                    <h2>Edit TX paths</h2>
+                  </div>
+                  <label class="path-picker">Selected path
+                    <select id="path-select"></select>
+                  </label>
+                </div>
+                <p class="editor-help">Select a point, then click its new position. Click empty space to add a point. Clear Path to rebuild a route.</p>
+                <div class="editor-actions">
+                  <button id="undo-point-button" type="button">Undo Point</button>
+                  <button id="clear-path-button" type="button">Clear Path</button>
+                  <button id="save-path-button" class="primary-button" type="button">Save Path</button>
+                  <button id="reset-calibration-button" type="button">Reset Calibration</button>
+                  <button id="export-calibration-button" type="button">Export JSON</button>
+                  <label class="import-calibration">Import JSON<input id="import-calibration-input" type="file" accept="application/json,.json"></label>
+                </div>
+                <details class="bounds-editor"><summary>Block bounds (reference coordinates)</summary><label>Block <select id="bounds-select"></select></label><div class="bounds-fields"><label>X <input id="bounds-x" type="number"></label><label>Y <input id="bounds-y" type="number"></label><label>W <input id="bounds-width" type="number" min="1"></label><label>H <input id="bounds-height" type="number" min="1"></label></div><button id="save-bounds-button" type="button">Save bounds</button></details>
+                <p id="editor-status" class="editor-status" role="status"></p>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
