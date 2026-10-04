@@ -1,5 +1,6 @@
 ## v0.3.7 — Phase V: Spec grounding and corrections
 
+- Switched the workspace to a light reading theme with darker description text, a wider font, and clearer source panels and popups; fixed narrow-screen stacking and popup title wrapping.
 - Added document and section/page references for RISC-V and SPI nodes and trace steps, with bilingual notes and a clickable source panel.
 - Corrected ADD control, I$ and LSU explanations, and clock-edge output-register display.
 - Added SPI master-mode preconditions and SPTEF write protocol explanations.

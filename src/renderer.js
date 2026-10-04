@@ -225,11 +225,12 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     title.title = title.textContent;
     const measure = document.createElement("canvas").getContext("2d");
     measure.font = getComputedStyle(title).font;
-    const desiredWidth = Math.min(frame.width - 24, Math.max(330, Math.ceil(measure.measureText(title.textContent).width + 66)));
+    const titleWidth = Math.ceil(measure.measureText(title.textContent).width + 66);
+    const desiredWidth = Math.min(frame.width - 24, Math.max(330, titleWidth));
     const overlap = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
     let width = desiredWidth, height, target, score = Infinity;
     for (let trial = desiredWidth; trial >= 250; trial -= 20) {
-      title.style.whiteSpace = trial + 2 < desiredWidth ? "normal" : "nowrap";
+      title.style.whiteSpace = titleWidth > trial ? "normal" : "nowrap";
       popup.style.width = `${trial}px`; popup.style.left = "0px"; popup.style.top = "0px";
       const trialHeight = popup.offsetHeight;
       const candidate = HF.placePopup(anchor, avoid, { width: frame.width, height: frame.height }, { width: trial, height: trialHeight });
@@ -239,7 +240,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       if (score < 1) break;
     }
     popup.style.width = `${width}px`;
-    title.style.whiteSpace = width + 2 < desiredWidth ? "normal" : "nowrap";
+    title.style.whiteSpace = titleWidth > width ? "normal" : "nowrap";
     popup.style.left = `${target.x}px`; popup.style.top = `${target.y}px`;
     popup.dataset.side = target.side;
     const tail = popup.querySelector("#flow-popup-tail");
