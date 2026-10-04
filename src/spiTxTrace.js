@@ -9,8 +9,9 @@ HF.generateSpiTxTrace = function generateSpiTxTrace(txByte, flow = HF.flow) {
     activeNodes: [node.id],
     values: { txByte, hexValue, binaryValue },
     note: `spi.${index + 1}.title`,
+    sources: [["spi-cr1", "spi-pins", "spi-sr", "spi-dr"], ["spi-master"], ["spi-pins"], ["spi-pins"]][index],
     captionKey: `spi.${index + 1}.title`,
-    popup: { anchor: { kind: "node", id: node.id }, titleKey: `spi.${index + 1}.title`, bodyKey: `spi.${index + 1}.body`, params: { hexValue, binaryValue } },
+    popup: { anchor: { kind: "node", id: node.id }, titleKey: `spi.${index + 1}.title`, bodyKey: `spi.${index + 1}.body`, whyKey: index === 0 ? "spi.1.why" : undefined, params: { hexValue, binaryValue } },
     extras: {}
   }));
   return { flowId: flow.flowId, fidelity: flow.fidelity, timeUnit: "step", events };

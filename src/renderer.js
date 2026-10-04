@@ -195,6 +195,10 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     popup.querySelector("#flow-popup-title").textContent = translate(data.titleKey, params);
     popup.querySelector("#flow-popup-body").textContent = translate(data.bodyKey, params);
     const why = popup.querySelector("#flow-popup-why"); why.hidden = !data.whyKey; why.textContent = data.whyKey ? translate(data.whyKey, params) : "";
+    const sourceLine = popup.querySelector("#flow-popup-spec");
+    const sourceRefs = HF.resolveSources(flow, event).refs;
+    sourceLine.hidden = !sourceRefs.length;
+    sourceLine.textContent = sourceRefs.length ? translate("ui.specLine", { refs: sourceRefs.map((ref) => `${ref.section} p.${ref.page}`).join(" · ") }) : "";
     const chips = popup.querySelector("#flow-popup-values"); chips.replaceChildren();
     Object.entries(params).filter(([key]) => key !== "binaryValue").slice(0, 3).forEach(([key, value]) => {
       const chip = document.createElement("span"); chip.textContent = `${key} ${value}`; chips.append(chip);
@@ -306,13 +310,6 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
     document.getElementById("data-value").textContent = shownValues?.hexValue ?? "—";
     document.getElementById("binary-value").textContent = shownValues?.binaryValue ?? "—";
     document.getElementById("description-value").textContent = event ? translate(meta.trace?.events[stageIndex]?.note ?? event.note, event.popup?.params) : translate(flow.readyNoteKey ?? "");
-    const ref = flow.specRef;
-    const verified = !!(ref?.doc && ref?.section && Number.isInteger(ref.page) && ref.page > 0 && Array.isArray(ref.signals) && ref.signals.length);
-    const refElement = document.getElementById("spec-ref-value");
-    refElement.textContent = verified ? `${ref.doc}, ${ref.section}, p. ${ref.page} (${ref.signals.join(", ")})` : translate("ui.unverifiedLong");
-    refElement.classList.toggle("unverified", !verified);
-    const chip = document.getElementById("spi-spec-chip");
-    if (chip) { chip.textContent = verified ? `${ref.doc}, p. ${ref.page}` : translate("ui.unverified"); chip.classList.toggle("unverified", !verified); }
     document.getElementById("destination-row").hidden = !terminal;
     document.getElementById("destination-value").textContent = flow.nodes.at(-1)?.label ?? "—";
     const runButton = document.getElementById("run-button");
@@ -714,10 +711,6 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       renderNodeChips(event && phase === "source" ? [...sourceNodes] : []);
     }
     netUI.badge.textContent = translate(trace?.badgeKey ?? flow.badgeKey ?? "ui.dependency");
-    const ref = flow.specRef;
-    const verified = !!(ref?.doc && ref?.section && Number.isInteger(ref.page) && ref.page > 0 && Array.isArray(ref.signals) && ref.signals.length);
-    netUI.specRef.textContent = verified ? `${ref.doc}, ${ref.section}, p. ${ref.page}` : translate("ui.unverified");
-    netUI.specRef.classList.toggle("unverified", !verified);
     netUI.status.textContent = imageSize ? translate(`ui.${meta.status}`) : translate("ui.unavailable");
     netUI.level.textContent = `${event ? meta.index + 1 : 0} / ${trace?.events.length ?? 0}`;
     netUI.run.textContent = translate(({ running: "ui.pause", waiting: "ui.next", done: "ui.replay", paused: meta.pacing === "guided" ? "ui.next" : "ui.resume" }[meta.status] ?? "ui.run"));
@@ -747,8 +740,9 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       state.forEach((item, key) => {
         const row = document.createElement("div"); row.className = "state-row";
         row.classList.toggle("is-written", changed.has(key));
-        const label = document.createElement("span"); label.textContent = item.field === "value" ? (flow.nodes.find((node) => node.id === item.node)?.label ?? item.node) : item.field;
+        const label = document.createElement("span"); label.textContent = item.fieldLabel ?? (item.field === "value" ? (flow.nodes.find((node) => node.id === item.node)?.label ?? item.node) : item.field);
         const value = document.createElement("strong"); value.textContent = item.value;
+        if (item.sourceKey) { const marker = document.createElement("small"); marker.textContent = translate(item.sourceKey); label.append(" ", marker); }
         row.append(label, value); netUI.state.append(row);
       });
     }
@@ -767,7 +761,7 @@ HF.createSpecRenderer = function createSpecRenderer({ geometry, flow, inputEleme
       controls.forEach((net) => {
         const chip = document.createElement("span"); chip.className = "net-control-chip";
         chip.classList.toggle("is-relevant", active.has(net.id));
-        chip.textContent = `${netById.get(net.id)?.label ?? net.id} = ${net.value}`; netUI.controls.append(chip);
+        chip.textContent = `${netById.get(net.id)?.label ?? net.id} = ${net.displayKey ? translate(net.displayKey) : net.value}`; netUI.controls.append(chip);
       });
       netUI.unused.hidden = !story || !unused.size;
       netUI.unusedButton.textContent = translate("ui.unused", { n: unused.size });

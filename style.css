@@ -459,4 +459,15 @@ body.spec-active .riscv-flow-panel .workspace-side-content, body.spec-active .wo
 .flow-popup[data-side="below"] #flow-popup-tail { top: -8px !important; }
 .diagram-overlay-container.has-spotlight.is-dimmed .spec-image { filter: none; }
 #spi-spec-chip { align-self: flex-start; padding: 3px 6px; border: 1px solid #956f3f; border-radius: 5px; background: #4d3826; font-size: 10px; }
+.source-panel { position: fixed; z-index: 30; top: 84px; right: 22px; width: min(340px, calc(100vw - 44px)); max-height: min(460px, calc(100vh - 108px)); overflow: auto; padding: 14px 16px; border: 1px solid #7c9aa9; border-radius: 10px; background: #162832; color: #e7f3f7; box-shadow: 0 14px 40px #07131dd9; }
+.source-panel[hidden] { display: none; }
+.source-panel > strong { display: block; padding-right: 28px; font-size: 15px; }
+.source-panel > button { position: absolute; top: 8px; right: 10px; border: 0; background: none; color: #e7f3f7; font-size: 22px; cursor: pointer; }
+.source-list p { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid #38505d; font-size: 12px; line-height: 1.35; }
+.source-list strong { color: #ffc58a; }
+.preconditions-card { margin: 2px 0 8px; padding: 8px 10px; border: 1px solid #597785; border-radius: 7px; background: #203540; font-size: 12px; line-height: 1.35; }
+.preconditions-card p { margin: 4px 0 0; color: #cfdee5; }
+#flow-popup #flow-popup-spec { color: #ffca91; font-size: 11px; line-height: 1.25; }
+.state-row small { display: block; color: #ffca91; font-size: 10px; }
+#spi-spec-chip, #riscv-spec-ref { cursor: pointer; color: #ffd19e; }
 .flow-popup strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

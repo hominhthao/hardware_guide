@@ -13,6 +13,7 @@
     <script src="data/i18n/en.js" defer></script>
     <script src="data/i18n/vi.js" defer></script>
     <script src="src/i18n.js" defer></script>
+    <script src="src/sources.js" defer></script>
     <script src="src/popup.js" defer></script>
     <script src="src/spiTxTrace.js" defer></script>
     <script src="src/riscvAddTrace.js" defer></script>
@@ -45,7 +46,7 @@
         </div>
         <button id="language-toggle" type="button" aria-label="Language: VI or EN">VI | EN</button>
         <button id="settings-button" type="button" aria-expanded="false" aria-controls="settings-drawer">⚙ <span data-i18n="ui.settings">Settings</span></button>
-        <span class="version">v0.3.6</span>
+        <span class="version">v0.3.7</span>
       </header>
 
       <main>
@@ -59,7 +60,7 @@
                     <span>Place the original SPI block diagram at <code>assets/spi_block_diagram.png</code>.</span>
                   </div>
                   <div class="diagram-tools"><span id="spec-summary" class="diagram-badge">Calibrated TX routes</span><div hidden><button id="fit-button" type="button">Overview</button><button id="focus-button" type="button" aria-pressed="false">Follow</button></div></div>
-                  <div id="flow-popup" class="flow-popup" role="dialog" aria-live="polite" hidden><button id="flow-popup-close" type="button" aria-label="Close explanation">×</button><strong id="flow-popup-title"></strong><p id="flow-popup-body"></p><p id="flow-popup-why"></p><div id="flow-popup-values"></div><span id="flow-popup-tail" aria-hidden="true"></span></div>
+                  <div id="flow-popup" class="flow-popup" role="dialog" aria-live="polite" hidden><button id="flow-popup-close" type="button" aria-label="Close explanation">×</button><strong id="flow-popup-title"></strong><p id="flow-popup-body"></p><p id="flow-popup-why"></p><p id="flow-popup-spec"></p><div id="flow-popup-values"></div><span id="flow-popup-tail" aria-hidden="true"></span></div>
                   <svg id="popup-leader" aria-hidden="true" hidden><line></line></svg>
                   <span id="spi-fidelity-badge" class="conceptual-badge">CONCEPTUAL – not cycle-accurate</span>
                   <svg id="spec-overlay" class="spec-overlay" role="img" aria-label="Original SPI specification diagram with transmit dataflow paths" hidden></svg>
@@ -85,6 +86,7 @@
                   <input id="tx-input" type="text" value="0xA5" autocomplete="off" spellcheck="false" aria-describedby="input-help tx-error">
                   <p id="input-help" class="input-help">8-bit hex or 8-bit binary</p>
                   <p id="tx-error" class="input-error" role="alert" hidden></p>
+                  <div id="spi-preconditions" class="preconditions-card"><strong data-i18n="spi.preconditions.title"></strong><p data-i18n="spi.preconditions.body"></p></div>
 
                   <div class="playback-options"><label>Speed <select id="speed-select"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label class="dim-toggle"><input id="dim-toggle" type="checkbox" checked> Dim background</label></div>
                   <button id="run-button" class="run-button" type="button">Run →</button>

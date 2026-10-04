@@ -49,8 +49,43 @@ window.HF = window.HF || {};
   };
   const riscvUi = makeDetails(el('riscv-flow-panel'), el('riscv-timeline'), 'riscv');
   const spiUi = makeDetails(document.querySelector('.workspace-sidebar > .flow-panel'), el('stage-timeline'), 'spi');
-  const spiSpecChip = document.createElement('span'); spiSpecChip.id = 'spi-spec-chip'; spiSpecChip.className = 'unverified';
+  const spiSpecChip = document.createElement('button'); spiSpecChip.type = 'button'; spiSpecChip.id = 'spi-spec-chip'; spiSpecChip.className = 'unverified';
   spiUi.current.after(spiSpecChip);
+  const sourcePanel = document.createElement('section'); sourcePanel.id = 'source-panel'; sourcePanel.className = 'source-panel'; sourcePanel.hidden = true;
+  const sourceHeading = document.createElement('strong');
+  const sourceClose = document.createElement('button'); sourceClose.type = 'button'; sourceClose.textContent = '×';
+  const sourceList = document.createElement('div'); sourceList.className = 'source-list';
+  sourcePanel.append(sourceHeading, sourceClose, sourceList); document.body.append(sourcePanel);
+  const sourceChips = { spi: spiSpecChip, riscv: el('riscv-spec-ref') };
+  let shownSource = null;
+  const closeSources = () => { sourcePanel.hidden = true; shownSource = null; };
+  sourceClose.addEventListener('click', closeSources);
+  const renderSources = (kind, event) => {
+    const flow = kind === 'riscv' ? HF.riscvDesign : HF.flow;
+    const source = HF.resolveSources(flow, event);
+    const chip = sourceChips[kind];
+    chip.textContent = source.verified ? t('ui.source', { name: HF.sourceShortName(source.doc) }) : t('ui.unverified');
+    chip.classList.toggle('unverified', !source.verified);
+    chip.title = source.verified ? source.doc.title : t('ui.unverifiedTip');
+    const spiStatus = el('spec-ref-value');
+    if (kind === 'spi') { spiStatus.textContent = chip.textContent; spiStatus.classList.toggle('unverified', !source.verified); }
+    if (shownSource !== kind) return;
+    sourceHeading.textContent = t('ui.sourceTitle');
+    sourceClose.setAttribute('aria-label', t('ui.sourceClose'));
+    sourceList.replaceChildren();
+    if (!source.verified) { const line = document.createElement('p'); line.textContent = t('ui.unverified'); sourceList.append(line); return; }
+    source.refs.forEach((ref) => {
+      const row = document.createElement('p');
+      const location = document.createElement('strong'); location.textContent = `${ref.section}, p.${ref.page}${ref.figure && ref.figure !== ref.section ? ` · ${ref.figure}` : ''}`;
+      const note = document.createElement('span'); note.textContent = ` ${t(ref.note)}`;
+      row.append(location, note); sourceList.append(row);
+    });
+  };
+  for (const [kind, chip] of Object.entries(sourceChips)) {
+    chip.setAttribute('role', 'button'); chip.tabIndex = 0;
+    chip.addEventListener('click', () => { shownSource = shownSource === kind ? null : kind; sourcePanel.hidden = !shownSource; if (shownSource) { const state = (kind === 'riscv' ? HF.riscvController : HF.spiController).player.state; renderSources(kind, state.trace?.events[state.index] ?? null); } });
+    chip.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chip.click(); } });
+  }
   const valuesDetails = document.createElement('details'); valuesDetails.className = 'edit-values'; valuesDetails.innerHTML = '<summary></summary>';
   valuesDetails.append(el('riscv-flow-panel').querySelector('.scenario-grid'), el('riscv-flow-panel').querySelector('.input-help'), el('instruction-label'));
   el('riscv-preset').after(valuesDetails);
@@ -84,8 +119,7 @@ window.HF = window.HF || {};
     document.querySelectorAll('.edit-values summary').forEach((node) => node.textContent = t('ui.editValues'));
     document.querySelectorAll('.all-steps summary').forEach((node) => node.textContent = t('ui.allSteps'));
     el('riscv-flow-panel').querySelector('.state-heading .info-label').textContent = t('ui.state');
-    el('riscv-spec-ref').title = t('ui.unverifiedTip'); el('spec-ref-value').title = t('ui.unverifiedTip');
-    spiSpecChip.title = t('ui.unverifiedTip');
+    sourceClose.setAttribute('aria-label', t('ui.sourceClose'));
     el('spi-fidelity-badge').textContent = t('ui.conceptual');
     el('spec-summary').textContent = t(activeDiagram === 'riscv' ? (document.getElementById('net-editor-panel').hidden ? 'ui.draftNets' : 'ui.adjustNets') : (document.getElementById('editor-panel').hidden ? 'ui.calibrated' : 'ui.adjustRoutes'));
     el('spi-diagram-button').textContent = t('ui.spiDiagram'); el('riscv-diagram-button').textContent = t('ui.riscvDiagram');
@@ -157,6 +191,8 @@ window.HF = window.HF || {};
     ui.progress.querySelector('.progress-count').textContent = t('ui.step', { n: event ? meta.index + 1 : 0, total: events.length });
     [...buttons.children].forEach((button, index) => { button.classList.toggle('is-current', !!event && index === meta.index); button.classList.toggle('is-passed', index < meta.index); button.disabled = meta.status === 'running'; button.title = t(events[index]?.captionKey ?? events[index]?.note ?? ''); });
     ui.current.textContent = event ? t(event.captionKey ?? event.note, event.popup?.params) : '';
+    renderSources(kind, event);
+    if (kind === 'spi') el('spi-preconditions').hidden = !!event;
   }
   HF.updateProgressUI = update;
   HF.translateUI = translateStatic;
@@ -167,7 +203,7 @@ window.HF = window.HF || {};
     HF.riscvController.renderer.renderTimeline((index) => HF.riscvController.player.seek(index), HF.riscvController.player.state.trace);
     HF.spiController.player.refresh(); HF.riscvController.player.refresh();
   });
-  const onDiagram = () => { settingsOptions(); setSettings(false); };
+  const onDiagram = () => { settingsOptions(); setSettings(false); closeSources(); };
   el('riscv-diagram-button').addEventListener('click', onDiagram);
   el('spi-diagram-button').addEventListener('click', onDiagram);
   translateStatic();

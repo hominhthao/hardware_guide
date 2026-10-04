@@ -26,7 +26,7 @@ HF.generateRiscvTrace = function generateRiscvTrace(design, scenario) {
       ["regfile", "brc", "immgen"], ["rs1_data", "rs2_data"], ["regfile", "opa_mux", "opb_mux"],
       "add.3.title", { detail: "add.3.detail", unused: ["imm", "br_less", "br_equal"] }),
     event(3, 3, [net("pc_sel", "pc_four"), net("opa_sel", "rs1_data"), net("opb_sel", "rs2_data"), net("alu_op", "ADD"),
-      net("mem_wren", "0"), net("wb_sel", "alu_data"), net("rd_wren", "1")], ["control"], [], ["control"],
+      net("mem_wren", "0"), net("wb_sel", "alu_data"), net("rd_wren", "1"), net("insn_vld", "1"), { ...net("br_un", "not-used"), displayKey: "value.notUsedByAdd" }], ["control"], [], ["control"],
       "add.4.title", { detail: "add.4.detail", muxSelect: choice }),
     event(4, 4, [net("opa_sel", "rs1_data"), net("opb_sel", "rs2_data")],
       ["control", "opa_mux", "opb_mux"], ["opa_sel", "opb_sel"], ["control", "opa_mux", "opb_mux"],
@@ -44,10 +44,19 @@ HF.generateRiscvTrace = function generateRiscvTrace(design, scenario) {
       "add.9.title", { detail: "add.9.detail", muxSelect: choice }),
     event(9, 7, [], ["regfile", "pc"], [], [],
       "add.10.title", { phase: "clock-edge", detail: "add.10.detail", stateWrites: [
-        { node: "regfile", field: "x3", value: hex(result) }, { node: "pc", field: "value", value: hex(pcFour) }
+        { node: "regfile", field: "x3", value: hex(result) }, { node: "pc", field: "value", value: hex(pcFour) },
+        { node: "pc_debug", field: "value", fieldLabel: "o_pc_debug", value: hex(pc), source: "figure", sourceKey: "ui.fromFigure" },
+        { node: "insn_vld_reg", field: "value", fieldLabel: "o_insn_vld", value: "1", source: "figure", sourceKey: "ui.fromFigure" }
       ] })
   ];
+  const sourceSets = [
+    ["rv-fig1"], ["rv-fig1", "rv-regmem", "rv-special"], ["rv-regmem", "rv-brc"],
+    ["rv-fig1", "rv-alu", "rv-brc", "rv-insnvld"], ["rv-fig1"], ["rv-fig1"],
+    ["rv-alu"], ["rv-lsu", "rv-special", "rv-fig1"], ["rv-fig1"],
+    ["rv-fig1", "rv-ports", "rv-regmem", "rv-insnvld"]
+  ];
   events.forEach((item, index) => {
+    item.sources = sourceSets[index];
     const key = `add.${index + 1}`;
     item.captionKey = `${key}.title`;
     item.detailKey = `${key}.detail`;

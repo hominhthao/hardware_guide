@@ -40,11 +40,22 @@ const netRows = [
   ["o_insn_vld", "insn_vld_reg", ["io"], "data"],
   ["io_link", "lsu", ["io"], "data", "ours"]
 ];
+const riscvNodeRefs = {"mux_pc": ["rv-fig1"], "pc": ["rv-fig1"], "plus4": ["rv-fig1"], "icache": ["rv-regmem", "rv-special"], "regfile": ["rv-regmem"], "immgen": ["rv-fig1"], "brc": ["rv-brc"], "opa_mux": ["rv-fig1"], "opb_mux": ["rv-fig1"], "alu": ["rv-alu"], "lsu": ["rv-lsu", "rv-map", "rv-special"], "control": ["rv-fig1", "rv-insnvld", "rv-alu"], "wb_mux": ["rv-fig1"], "pc_debug": ["rv-fig1", "rv-ports"], "insn_vld_reg": ["rv-fig1", "rv-ports"], "io": ["rv-ports"]};
 HF.riscvDesign = {
   designId: "riscv-sc",
   diagramId: "riscv-sc",
-  specRef: { doc: "", section: "", page: null, signals: [] },
-  nodes: riscvNodes.map(([id, label, type, clocked]) => ({ id, label, type, clocked, geometryNodeId: id })),
+  specRef: { doc: { title: "Milestone 2 - Design of a Single Cycle RISC-V Processor", author: "Hai Cao", rev: "2.0.0" }, refs: [
+    { id: 'rv-fig1', section: 'Figure 1', page: 3, figure: 'Figure 1', note: 'ref.rv-fig1.note' },
+    { id: 'rv-ports', section: '§2.1', page: 4, note: 'ref.rv-ports.note' },
+    { id: 'rv-alu', section: '§3.1', page: 5, note: 'ref.rv-alu.note' },
+    { id: 'rv-brc', section: '§3.2', page: 6, note: 'ref.rv-brc.note' },
+    { id: 'rv-regmem', section: '§4.1.1', page: 6, note: 'ref.rv-regmem.note' },
+    { id: 'rv-lsu', section: '§4.2', page: 8, figure: 'Figure 3', note: 'ref.rv-lsu.note' },
+    { id: 'rv-map', section: 'Table 1', page: 9, note: 'ref.rv-map.note' },
+    { id: 'rv-special', section: '§4.2.4', page: 9, note: 'ref.rv-special.note' },
+    { id: 'rv-insnvld', section: '§5', page: 10, note: 'ref.rv-insnvld.note' },
+  ] },
+  nodes: riscvNodes.map(([id, label, type, clocked]) => ({ id, label, type, clocked, geometryNodeId: id, specRefIds: riscvNodeRefs[id] })),
   nets: netRows.map(([id, from, to, role, labelSource = "diagram"]) => ({ id, label: id, from, to, role, labelSource })),
   muxes: [
     { id: "mux_pc", inputs: ["pc_four", "alu_data"], selectNet: "pc_sel", outputNet: "pc_next" },

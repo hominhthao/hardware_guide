@@ -1,3 +1,10 @@
+## v0.3.7 — Phase V: Spec grounding and corrections
+
+- Added document and section/page references for RISC-V and SPI nodes and trace steps, with bilingual notes and a clickable source panel.
+- Corrected ADD control, I$ and LSU explanations, and clock-edge output-register display.
+- Added SPI master-mode preconditions and SPTEF write protocol explanations.
+- Added local PDF ignore rules, specification status notes, and reference tests.
+
 # Changelog
 
 ## v0.3.6 — Phase A.3 explanations and readability

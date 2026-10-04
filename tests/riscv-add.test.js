@@ -39,7 +39,9 @@ for (const [x1, x2, result] of [[5, 7, 12], [0, 0, 0], [0xFFFFFFFF, 1, 0], [0x7F
     (index === 4 || index === 6 || index === 7 || index === 8) ||
     event.focusNets.every((id) => design.nets.find((net) => net.id === id).role !== "control")));
   report(section, "control decode has no focused wire", trace.events[3].focusNets.length === 0 &&
-    trace.events[3].focusNodes.length === 1 && trace.events[3].activeNets.filter((net) => net.role === "control").length === 7);
+    trace.events[3].focusNodes.length === 1 && trace.events[3].activeNets.filter((net) => net.role === "control").length === 9);
+  report(section, "insn_vld and br_un ADD control chips", trace.events[3].activeNets.some((net) => net.id === "insn_vld" && net.value === "1") &&
+    trace.events[3].activeNets.some((net) => net.id === "br_un" && net.displayKey === "value.notUsedByAdd"));
   report(section, "same-level steps are marked by dependencyLevel", trace.events[2].dependencyLevel === trace.events[3].dependencyLevel &&
     trace.events[4].dependencyLevel === trace.events[5].dependencyLevel &&
     trace.events[7].dependencyLevel === trace.events[8].dependencyLevel);
@@ -48,7 +50,9 @@ for (const [x1, x2, result] of [[5, 7, 12], [0, 0, 0], [0xFFFFFFFF, 1, 0], [0x7F
     trace.events[5].muxSelect.opa_mux === "rs1_data" && trace.events[5].muxSelect.opb_mux === "rs2_data");
   report(section, "unused results are listed for step 3", ["imm", "br_less", "br_equal"].every((id) => trace.events[2].unused.includes(id)));
   report(section, "state writes occur only on the clock edge", trace.events.slice(0, -1).every((event) => event.stateWrites.length === 0) &&
-    trace.events.at(-1).stateWrites.length === 2);
+    trace.events.at(-1).stateWrites.length === 4);
   const writes = new Map(trace.events.at(-1).stateWrites.map((write) => [`${write.node}.${write.field}`, write.value]));
   report(section, "x3 and PC final values are correct", writes.get("regfile.x3") === `0x${result.toString(16).toUpperCase()}` && writes.get("pc.value") === "0x4");
+  report(section, "output registers update from figure", writes.get("pc_debug.value") === "0x0" && writes.get("insn_vld_reg.value") === "1" &&
+    trace.events.at(-1).stateWrites.filter((write) => write.source === "figure").length === 2);
 }
