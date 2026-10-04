@@ -2,6 +2,8 @@
 
 HardwareFlow is a local hardware architecture and dataflow visualizer. Open `index.html` in a modern browser; no server, dependencies, or build step are needed.
 
+**Public demo:** [Open HardwareFlow](https://hominhthao.github.io/hardware_guide/). GitHub Pages publishes the `main` branch from the repository root; later pushes to `main` update the same link.
+
 ## Views
 
 - **SPI TX:** Shows the original SPI specification diagram directly in SVG, with calibrated signal routes layered over it. The walkthrough is SPI Data Register → Shifter → Port Control Logic → MOSI.
