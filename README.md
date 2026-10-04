@@ -10,7 +10,7 @@ HardwareFlow is a local hardware architecture and dataflow visualizer. Open `ind
 - **RISC-V single-cycle:** Overlays Figure 1: Single Cycle Processor with a ten-step dependency walkthrough of `ADD x3, x1, x2`. The diagram switcher changes the image, scenario inputs, trace, and controls without reloading.
 
 The views switch without reloading. On desktop, the specification diagram and controls share one compact workspace. The diagram remains the main focus and fits within the available panel while preserving its aspect ratio.
-The light reading theme uses dark text on pale panels, larger explanation text, and a single-column layout on narrow screens.
+Choose **Sáng / Tối** in **Cài đặt → Giao diện** (Light / Dark in English). Dark is the default; the browser remembers either choice. Both themes use larger explanation text, and narrow screens switch to one column.
 
 ## TX data and controls
 

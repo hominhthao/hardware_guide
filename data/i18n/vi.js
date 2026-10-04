@@ -24,6 +24,7 @@ HF.messages.vi = {
   'ui.presentation': 'Cách trình bày',
   'ui.pacing': 'Nhịp phát',
   'ui.languageToggle': 'Chuyển giữa tiếng Việt và tiếng Anh',
+  'ui.theme': 'Giao diện', 'ui.lightTheme': 'Sáng', 'ui.darkTheme': 'Tối',
   'ui.missingImage': 'Không tìm thấy sơ đồ gốc',
   'ui.missingImageHelp': 'Đặt ảnh sơ đồ gốc tại',
   'ui.calibrationNets': 'Hiệu chỉnh / đồ thị net',

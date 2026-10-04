@@ -38,6 +38,21 @@ window.HF = window.HF || {};
   const languageButtons = document.createElement('div'); languageButtons.className = 'language-choices';
   for (const code of ['vi', 'en']) { const button = document.createElement('button'); button.type = 'button'; button.textContent = code.toUpperCase(); button.dataset.language = code; button.addEventListener('click', () => HF.i18n.setLanguage(code)); languageButtons.append(button); }
   el('settings-language').append(languageButtons);
+  const themeStylesheet = el('light-theme-stylesheet');
+  const themeButtons = [...el('settings-theme').querySelectorAll('[data-theme-choice]')];
+  const syncThemeButtons = () => themeButtons.forEach((button) => {
+    const selected = button.dataset.themeChoice === document.documentElement.dataset.theme;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  themeButtons.forEach((button) => button.addEventListener('click', () => {
+    const theme = button.dataset.themeChoice;
+    document.documentElement.dataset.theme = theme;
+    themeStylesheet.media = theme === 'light' ? 'all' : 'not all';
+    try { localStorage.setItem('hardwareflow.theme.v1', theme); } catch { /* Keep the session choice. */ }
+    syncThemeButtons();
+  }));
+  syncThemeButtons();
   const makeDetails = (panel, timeline, kind) => {
     const content = panel.querySelector('.workspace-side-content');
     const details = document.createElement('details'); details.className = 'all-steps'; details.innerHTML = `<summary></summary>`; details.append(timeline); content.append(details);
@@ -172,7 +187,7 @@ window.HF = window.HF || {};
     for (const [selector, key] of [
       ['#diagram-switch', 'ui.diagram'], ['#spec-mode-switch', 'ui.specMode'], ['#spec-view', 'ui.workspace'],
       ['.workspace-sidebar', 'ui.controls'], ['#riscv-timeline', 'ui.dependencyLevels'], ['#stage-timeline', 'ui.txStages'],
-      ['#language-toggle', 'ui.languageToggle'], ['.story-options .segmented', 'ui.presentation']
+      ['#language-toggle', 'ui.languageToggle'], ['.story-options .segmented', 'ui.presentation'], ['#settings-theme', 'ui.theme']
     ]) document.querySelector(selector)?.setAttribute('aria-label', t(key));
     pacingButtons.setAttribute('aria-label', t('ui.pacing'));
     spiPacing.setAttribute('aria-label', t('ui.pacing'));

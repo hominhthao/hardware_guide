@@ -24,6 +24,7 @@ HF.messages.en = {
   'ui.presentation': 'Presentation',
   'ui.pacing': 'Pacing',
   'ui.languageToggle': 'Switch between Vietnamese and English',
+  'ui.theme': 'Theme', 'ui.lightTheme': 'Light', 'ui.darkTheme': 'Dark',
   'ui.missingImage': 'Specification diagram not found',
   'ui.missingImageHelp': 'Place the original diagram at',
   'ui.calibrationNets': 'Calibration / net graph',

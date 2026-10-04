@@ -1,11 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#10161d">
     <title>HardwareFlow — Architecture Visualizer</title>
     <link rel="stylesheet" href="style.css">
+    <link id="light-theme-stylesheet" rel="stylesheet" href="light-theme.css" media="not all">
+    <script>
+      try {
+        if (localStorage.getItem('hardwareflow.theme.v1') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+          document.getElementById('light-theme-stylesheet').media = 'all';
+        }
+      } catch { /* The default dark theme also works without storage. */ }
+    </script>
     <script src="data/geometry.js" defer></script>
     <script src="data/flow.js" defer></script>
     <script src="data/riscvGeometry.js" defer></script>
@@ -140,6 +149,7 @@
                 <div class="settings-title"><strong data-i18n="ui.settings">Settings</strong><button id="settings-close" type="button" aria-label="Close settings">×</button></div>
                 <div class="settings-group"><h3 data-i18n="ui.playback">Playback</h3><div id="settings-playback"></div></div>
                 <div class="settings-group"><h3 data-i18n="ui.view">View</h3><div id="settings-view"></div><label><input id="popup-toggle" type="checkbox" checked> <span data-i18n="ui.popups">Pop-ups</span></label></div>
+                <div class="settings-group"><h3 data-i18n="ui.theme">Theme</h3><div id="settings-theme" class="theme-choices" role="group" aria-label="Theme"><button type="button" data-theme-choice="light" data-i18n="ui.lightTheme" aria-pressed="false">Light</button><button type="button" data-theme-choice="dark" data-i18n="ui.darkTheme" aria-pressed="true">Dark</button></div></div>
                 <div class="settings-group"><h3 data-i18n="ui.language">Language</h3><div id="settings-language"></div></div>
                 <div class="settings-group"><h3 data-i18n="ui.developer">Developer tools</h3><div id="settings-developer"></div></div>
                 <small id="keyboard-help" title="Space / Right: Next · Left: Back · R: Reset"></small>
